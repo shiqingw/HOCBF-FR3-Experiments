@@ -6,7 +6,7 @@ import numpy as np
 import pinocchio as pin
 from pinocchio.robot_wrapper import RobotWrapper
 from scipy.spatial.transform import Rotation
-from FR3Py import getDataPath
+from FR3Py import ASSETS_PATH
 
 class PinocchioModel:
     def __init__(self, base_pos=[0,0,0], base_quat=[0,0,0,1]):
@@ -15,9 +15,9 @@ class PinocchioModel:
         base_pos: [x,y,z]
         base_quat: [qx,qy,qz,qw]
         """
-        package_directory = getDataPath()
-        robot_URDF = package_directory + "/assets/fr3_mj/fr3_with_camera_and_bounding_boxes.urdf"
-        self.robot = RobotWrapper.BuildFromURDF(robot_URDF, package_directory)
+        package_directory = ASSETS_PATH
+        robot_URDF = package_directory + "/fr3_mj/fr3_with_camera_and_bounding_boxes.urdf"
+        self.pin_robot = RobotWrapper.BuildFromURDF(robot_URDF, package_directory)
         
         # Define base position and orientation
         self.base_p_offset = np.array(base_pos).reshape(-1,1)
@@ -116,9 +116,9 @@ class PinocchioModel:
         """
         assert q.shape == (9,), "q vector should be 9,"
         assert dq.shape == (9,), "dq vector should be 9,"
-        self.robot.computeJointJacobians(q)
-        self.robot.framesForwardKinematics(q)
-        self.robot.centroidalMomentum(q, dq)
+        self.pin_robot.computeJointJacobians(q)
+        self.pin_robot.framesForwardKinematics(q)
+        self.pin_robot.centroidalMomentum(q, dq)
         
         info = {"q": q,
                 "dq": dq}
