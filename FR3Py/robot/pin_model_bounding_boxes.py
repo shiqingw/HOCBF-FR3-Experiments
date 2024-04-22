@@ -17,7 +17,7 @@ class PinocchioModel:
         """
         package_directory = ASSETS_PATH
         robot_URDF = package_directory + "/fr3_mj/fr3_with_camera_and_bounding_boxes.urdf"
-        self.pin_robot = RobotWrapper.BuildFromURDF(robot_URDF, package_directory)
+        self.robot = RobotWrapper.BuildFromURDF(robot_URDF, package_directory)
         
         # Define base position and orientation
         self.base_p_offset = np.array(base_pos).reshape(-1,1)
@@ -27,24 +27,24 @@ class PinocchioModel:
         self.jacobian_frame = pin.ReferenceFrame.LOCAL_WORLD_ALIGNED
 
         # Get frame ids for bounding boxes
-        self.FR3_LINK3_BB_FRAME_ID = self.pin_robot.model.getFrameId("fr3_link3_bounding_box")
-        self.FR3_LINK4_BB_FRAME_ID = self.pin_robot.model.getFrameId("fr3_link4_bounding_box")
-        self.FR3_LINK5_1_BB_FRAME_ID = self.pin_robot.model.getFrameId("fr3_link5_1_bounding_box")
-        self.FR3_LINK5_2_BB_FRAME_ID = self.pin_robot.model.getFrameId("fr3_link5_2_bounding_box")
-        self.FR3_LINK6_BB_FRAME_ID = self.pin_robot.model.getFrameId("fr3_link6_bounding_box")
-        self.FR3_LINK7_BB_FRAME_ID = self.pin_robot.model.getFrameId("fr3_link7_bounding_box")
-        self.FR3_HAND_BB_FRAME_ID = self.pin_robot.model.getFrameId("fr3_hand_bounding_box")
+        self.FR3_LINK3_BB_FRAME_ID = self.robot.model.getFrameId("fr3_link3_bounding_box")
+        self.FR3_LINK4_BB_FRAME_ID = self.robot.model.getFrameId("fr3_link4_bounding_box")
+        self.FR3_LINK5_1_BB_FRAME_ID = self.robot.model.getFrameId("fr3_link5_1_bounding_box")
+        self.FR3_LINK5_2_BB_FRAME_ID = self.robot.model.getFrameId("fr3_link5_2_bounding_box")
+        self.FR3_LINK6_BB_FRAME_ID = self.robot.model.getFrameId("fr3_link6_bounding_box")
+        self.FR3_LINK7_BB_FRAME_ID = self.robot.model.getFrameId("fr3_link7_bounding_box")
+        self.FR3_HAND_BB_FRAME_ID = self.robot.model.getFrameId("fr3_hand_bounding_box")
 
         # Get frame ID for links
-        self.FR3_LINK3_FRAME_ID = self.pin_robot.model.getFrameId("fr3_link3")
-        self.FR3_LINK4_FRAME_ID = self.pin_robot.model.getFrameId("fr3_link4")
-        self.FR3_LINK5_FRAME_ID = self.pin_robot.model.getFrameId("fr3_link5")
-        self.FR3_LINK5_FRAME_ID = self.pin_robot.model.getFrameId("fr3_link5")
-        self.FR3_LINK6_FRAME_ID = self.pin_robot.model.getFrameId("fr3_link6")
-        self.FR3_LINK7_FRAME_ID = self.pin_robot.model.getFrameId("fr3_link7")
-        self.FR3_HAND_FRAME_ID = self.pin_robot.model.getFrameId("fr3_hand")
-        self.EE_FRAME_ID = self.pin_robot.model.getFrameId("fr3_hand_tcp")
-        self.FR3_CAMERA_FRAME_ID = self.pin_robot.model.getFrameId("fr3_camera")
+        self.FR3_LINK3_FRAME_ID = self.robot.model.getFrameId("fr3_link3")
+        self.FR3_LINK4_FRAME_ID = self.robot.model.getFrameId("fr3_link4")
+        self.FR3_LINK5_FRAME_ID = self.robot.model.getFrameId("fr3_link5")
+        self.FR3_LINK5_FRAME_ID = self.robot.model.getFrameId("fr3_link5")
+        self.FR3_LINK6_FRAME_ID = self.robot.model.getFrameId("fr3_link6")
+        self.FR3_LINK7_FRAME_ID = self.robot.model.getFrameId("fr3_link7")
+        self.FR3_HAND_FRAME_ID = self.robot.model.getFrameId("fr3_hand")
+        self.EE_FRAME_ID = self.robot.model.getFrameId("fr3_hand_tcp")
+        self.FR3_CAMERA_FRAME_ID = self.robot.model.getFrameId("fr3_camera")
 
         # Choose the useful frame names with frame ids 
         self.frame_names_and_ids = {
@@ -78,8 +78,8 @@ class PinocchioModel:
 
     def compute_crude_location(self, base_R_offset, base_p_offset, frame_id):
         # get link orientation and position
-        _p = self.pin_robot.data.oMf[frame_id].translation
-        _Rot = self.pin_robot.data.oMf[frame_id].rotation
+        _p = self.robot.data.oMf[frame_id].translation
+        _Rot = self.robot.data.oMf[frame_id].rotation
 
         # compute link transformation matrix
         _T = np.hstack((_Rot, _p[:, np.newaxis]))
@@ -116,16 +116,16 @@ class PinocchioModel:
         """
         assert q.shape == (9,), "q vector should be 9,"
         assert dq.shape == (9,), "dq vector should be 9,"
-        self.pin_robot.computeJointJacobians(q)
-        self.pin_robot.framesForwardKinematics(q)
-        self.pin_robot.centroidalMomentum(q, dq)
+        self.robot.computeJointJacobians(q)
+        self.robot.framesForwardKinematics(q)
+        self.robot.centroidalMomentum(q, dq)
         
         info = {"q": q,
                 "dq": dq}
 
         for frame_name, frame_id in self.frame_names_and_ids.items():
             # Frame jacobian
-            info[f"J_{frame_name}"] = self.pin_robot.getFrameJacobian(frame_id, self.jacobian_frame)
+            info[f"J_{frame_name}"] = self.robot.getFrameJacobian(frame_id, self.jacobian_frame)
 
             # Frame position and orientation
             (   info[f"P_{frame_name}"],
@@ -137,12 +137,12 @@ class PinocchioModel:
 
             # Advanced calculation
             info[f"dJdq_{frame_name}"] = pin.getFrameClassicalAcceleration(
-                self.pin_robot.model, self.pin_robot.data, frame_id, self.jacobian_frame
+                self.robot.model, self.robot.data, frame_id, self.jacobian_frame
             )
 
         # Get dynamics
         info["M"] = self.robot.mass(q)
-        info["Minv"] = self.robot.mass(q)
+        info["Minv"] = pin.computeMinverse(self.robot.model, self.robot.data, q)
         info["nle"] = self.robot.nle(q, dq)
         info["G"] = self.robot.gravity(q)
         

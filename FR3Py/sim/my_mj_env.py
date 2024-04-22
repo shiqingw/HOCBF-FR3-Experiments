@@ -46,28 +46,37 @@ class FR3Sim:
         self.model.vis.scale.contactheight = 0.03
         self.model.vis.scale.forcewidth = 0.05
         self.model.vis.map.force = 0.3
+
+        self.ngeom = 0
+        self.maxgeom = 1000
         
-        self.q0 = np.array([0.0, -0.785398163, 0.0, -2.35619449, 0.0, 1.57079632679, 0.785398163397])
-        self.reset()
-        mujoco.mj_step(self.model, self.data)
-        self.viewer.sync()
+        # self.q0 = np.array([0.0, -0.785398163, 0.0, -2.35619449, 0.0, 1.57079632679, 0.785398163397, 0.04, 0.04])
+        # self.reset()
+        # mujoco.mj_step(self.model, self.data)
+        # self.viewer.sync()
         self.nv = self.model.nv
         self.jacp = np.zeros((3, self.nv))
         self.jacr = np.zeros((3, self.nv))
         self.M = np.zeros((self.nv, self.nv))
+        self.Minv = np.zeros((self.nv, self.nv))
         self.latest_command_stamp = time.time()
         self.actuator_tau = np.zeros(7)
         self.tau_ff = np.zeros(7)
         self.dq_des = np.zeros(7)
 
-    def reset(self):
-        self.data.qpos[:7] = self.q0
-        self.data.qvel[:7] = np.zeros(7)
+    def reset(self, q0):
+        self.data.qpos[:] = q0
+        self.data.qvel[:] = np.zeros(9)
 
     def getJointStates(self):
         return {"q":self.data.qpos[:7], 
                "dq":self.data.qvel[:7],
-               'tau_est':(self.data.qfrc_applied.squeeze()+self.data.qfrc_smooth.squeeze())[0:7]}
+               'tau_est':(self.data.qfrc_constraint.squeeze()+self.data.qfrc_smooth.squeeze())[0:7]}
+    
+    def getFingerStates(self):
+        return {"q":self.data.qpos[7:9], 
+               "dq":self.data.qvel[7:9],
+               'tau_est':(self.data.qfrc_constraint.squeeze()+self.data.qfrc_smooth.squeeze())[7:9]}
 
     def setCommands(self, cmd):
         self.dq_des = cmd
@@ -101,11 +110,37 @@ class FR3Sim:
 
     def getDynamicsParams(self):
         mujoco.mj_fullM(self.model, self.M, self.data.qM)
+        mujoco.mj_solveM(self.model, self.data, self.Minv, np.eye(self.Minv.shape[0]))
         nle = self.data.qfrc_bias.reshape(self.nv,1)
         return {
             'M':self.M,
-            'nle':nle
+            'nle':nle,
+            'Minv':self.Minv
         }
 
     def close(self):
         self.viewer.close()
+
+    def add_visual_capsule(self, point1, point2, radius, rgba, id_geom_offset=0, limit_num=False):
+        """Adds one capsule to an mjvScene."""
+        scene = self.viewer.user_scn
+        if limit_num:
+            if self.ngeom >= self.maxgeom:
+                id_geom = self.ngeom % self.maxgeom + id_geom_offset
+            else:
+                scene.ngeom += 1
+                id_geom = self.ngeom + id_geom_offset
+            self.ngeom += 1
+        else:
+            id_geom = scene.ngeom
+            scene.ngeom += 1
+        # initialise a new capsule, add it to the scene using mjv_makeConnector
+        mujoco.mjv_initGeom(scene.geoms[id_geom],
+                            mujoco.mjtGeom.mjGEOM_CAPSULE, np.zeros(3),
+                            np.zeros(3), np.zeros(9), np.array(rgba).astype(np.float32))
+        mujoco.mjv_makeConnector(scene.geoms[id_geom],
+                                mujoco.mjtGeom.mjGEOM_CAPSULE, radius,
+                                point1[0], point1[1], point1[2],
+                                point2[0], point2[1], point2[2])
+        
+        return 

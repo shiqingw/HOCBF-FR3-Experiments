@@ -71,12 +71,14 @@ if __name__ == "__main__":
     base_quat = simulator_config["base_quat"]
     initial_joint_angles = test_settings["initial_joint_angles"]
 
-    env = FR3Sim(xml_path=os.path.join(ASSETS_PATH, "fr3_mj/fr3_on_table_with_bounding_boxes_wiping.xml"))
-    env.reset()
+    # Mujoco simulation
+    mj_env = FR3Sim(xml_path=os.path.join(ASSETS_PATH, "fr3_mj/fr3_on_table_with_bounding_boxes_wiping.xml"))
+    mj_env.reset(np.array(initial_joint_angles, dtype = config.np_dtype))
+    mj_env.step()
+    dt = mj_env.dt
+
+    # Pinocchio model
     pin_model = PinocchioModel(base_pos=base_pos, base_quat=base_quat)
-    dt = env.dt
-    time.sleep(1)
-    assert False
 
     # Load the obstacle
     obstacle_config = test_settings["obstacle_config"]
@@ -116,9 +118,9 @@ if __name__ == "__main__":
     traj_circle[:,1] = traj_center[1] + traj_radius * np.sin(thetas)
     traj_circle[:,2] = 0.83
     for i in range(N-1):
-        env.add_visual_capsule(traj_circle[i], traj_circle[i+1], 0.004, np.array([0,0,1,1]))
-        env.viewer.sync()
-    id_geom_offset = env.viewer.user_scn.ngeom 
+        mj_env.add_visual_capsule(traj_circle[i], traj_circle[i+1], 0.004, np.array([0,0,1,1]))
+        mj_env.viewer.sync()
+    id_geom_offset = mj_env.viewer.user_scn.ngeom 
 
     # CBF parameters
     CBF_config = test_settings["CBF_config"]
@@ -151,35 +153,45 @@ if __name__ == "__main__":
 
     # Forward simulate the system
     print("==> Forward simulate the system")
-    u_prev = info["nle_mj"][:7]
-    P_EE_prev = info["P_EE"]
+    dyn_info = mj_env.getDynamicsParams()
+    joint_info = mj_env.getJointStates()
+    finger_info = mj_env.getFingerStates()
+    q = np.concatenate([joint_info["q"], finger_info["q"]])
+    dq = np.concatenate([joint_info["dq"], finger_info["dq"]])
+    pin_info = pin_model.getInfo(q, dq)
+    u_prev = np.squeeze(dyn_info["nle"][:7])
+    P_EE_prev = pin_info["P_EE"]
+    
     for i in range(horizon):
-        all_info.append(info)
+        all_info.append({
+            'dyn_info': dyn_info,
+            'joint_info': joint_info,
+            'finger_info': finger_info,
+            'pin_info': pin_info
+        })
 
         time_control_loop_start = time.time()
 
         # Update info
-        q = info["q"]
-        dq = info["dq"]
-        nle = info["nle"]
-        Minv = info["Minv"]
-        M = info["M"]
-        G = info["G"]
+        dyn_info = mj_env.getDynamicsParams()
+        joint_info = mj_env.getJointStates()
+        finger_info = mj_env.getFingerStates()
+        q = np.concatenate([joint_info["q"], finger_info["q"]])
+        dq = np.concatenate([joint_info["dq"], finger_info["dq"]])
+        pin_info = pin_model.getInfo(q, dq)
 
-        Minv_mj = info["Minv_mj"]
-        M_mj = info["M_mj"]
-        nle_mj = info["nle_mj"]
-        qfrc_constraint = info["qfrc_constraint"]
-        qfrc_smooth = info["qfrc_smooth"]
-        u_applied = info["qfrc_actuator"]
+        Minv_mj = dyn_info["Minv"]
+        M_mj = dyn_info["M"]
+        nle_mj = np.squeeze(dyn_info["nle"])
+        tau_mes = joint_info["tau_est"]
 
         tau_ext = np.zeros(9, dtype=config.np_dtype)
-        tau_ext[:7] += -nle_mj[:7] + u_prev - qfrc_constraint[:7] - qfrc_smooth[:7]
+        tau_ext[:7] += - nle_mj[:7] + u_prev - tau_mes 
 
-        P_EE = info["P_EE"]
-        R_EE = info["R_EE"]
-        J_EE = info["J_EE"]
-        dJdq_EE = info["dJdq_EE"]
+        P_EE = pin_info["P_EE"]
+        R_EE = pin_info["R_EE"]
+        J_EE = pin_info["J_EE"]
+        dJdq_EE = pin_info["dJdq_EE"]
         v_EE = J_EE @ dq
 
         # Visualize the trajectory
@@ -188,7 +200,8 @@ if __name__ == "__main__":
                      np.clip(1-speed/10, 0, 1),
                      .5, 1.))
         radius=.003*(1+speed)
-        env.add_visual_capsule(P_EE_prev, P_EE, radius, rgba, id_geom_offset, True)
+        # radius=1000*(1+speed)
+        mj_env.add_visual_capsule(P_EE_prev, P_EE, radius, rgba, id_geom_offset, True)
 
         # Primary obejctive: tracking control
         Kp = np.diag([20,20,20,100,100,100])
@@ -211,8 +224,8 @@ if __name__ == "__main__":
         # Compute the input torque
         Spinv = S.T @ np.linalg.pinv(S @ S.T + 0.01* np.eye(S.shape[0]))
         # Spinv = np.linalg.pinv(S)
-        u_nominal = nle_mj + Spinv @ u_task + (np.eye(len(q)) - Spinv @ S) @ u_joint 
-        # u_nominal = nle_mj + Spinv @ u_task 
+        u_nominal = nle_mj + Spinv @ u_task + (np.eye(len(q)) - Spinv @ S) @ u_joint
+        # u_nominal = Spinv @ u_task 
 
         J_EE_reduced = J_EE[:,:7]
         F_ext = np.linalg.pinv(J_EE_reduced.T) @ tau_ext[:7]
@@ -236,10 +249,10 @@ if __name__ == "__main__":
 
             for kk in range(len(selected_BBs)):
                 name_BB = selected_BBs[kk]
-                P_BB = info["P_"+name_BB]
-                R_BB = info["R_"+name_BB]
-                J_BB = info["J_"+name_BB]
-                dJdq_BB = info["dJdq_"+name_BB]
+                P_BB = pin_info["P_"+name_BB]
+                R_BB = pin_info["R_"+name_BB]
+                J_BB = pin_info["J_"+name_BB]
+                dJdq_BB = pin_info["dJdq_"+name_BB]
                 v_BB = J_BB @ dq
                 D_BB = BB_coefs.coefs[name_BB]
                 quat_BB = get_quat_from_rot_matrix(R_BB)
@@ -309,13 +322,15 @@ if __name__ == "__main__":
             phi2_tmp = np.zeros(n_CBF, dtype=config.np_dtype)
 
         # Step the environment
-        u = u[:7]
+        u_prev = u[:7]
+        u = u - nle_mj
         finger_pos = 0.04
-        info = env.step(tau=u, finger_pos=finger_pos)
+        u = u[:7]
+        mj_env.setCommands(u)
+        mj_env.step()
         time.sleep(max(0,dt-time_control_loop_end+time_control_loop_start))
 
         # Record
-        u_prev = u
         P_EE_prev = P_EE
         joint_angles[i,:] = q
         controls[i,:] = u
@@ -328,7 +343,7 @@ if __name__ == "__main__":
         time_control_loop[i] = time_control_loop_end - time_control_loop_start
 
     # Close the environment
-    env.close()
+    mj_env.close()
 
     # Save summary
     print("==> Save results")
