@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<robot name="simple_ball">
+
+  <!-- Link for the ball -->
+  <link name="ball_link">
+    
+    <!-- Visual properties of the ball -->
+    <visual>
+      <geometry>
+        <sphere radius="0.2"/> <!-- Radius of the ball -->
+      </geometry>
+      <material name="white">
+        <color rgba="1 1 1 0.5"/> <!-- Color of the ball (white) -->
+      </material>
+    </visual>
+
+    <!-- Collision properties of the ball, same as visual here -->
+    <!-- <collision>
+      <geometry>
+        <sphere radius="0.2"/>
+      </geometry>
+    </collision> -->
+
+    <!-- Inertial properties, assuming a uniform density sphere -->
+    <inertial>
+      <mass value="0.1"/> <!-- Mass of the ball -->
+      <inertia ixx="0.00002" ixy="0" ixz="0" iyy="0.00002" iyz="0" izz="0.00002"/>
+    </inertial>
+
+  </link>
+
+</robot>
