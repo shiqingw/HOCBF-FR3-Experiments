@@ -57,7 +57,7 @@
     },
 
     "CBF_config":{
-        "active": 0,
+        "active": 1,
         "_selected_bbs": ["HAND_BB", "LINK7_BB", "LINK6_BB", "LINK5_2_BB", "LINK5_1_BB", "LINK4_BB", "LINK3_BB"],
         "_alpha0": [1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3],
         "_gamma1": [3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0],

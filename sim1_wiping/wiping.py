@@ -10,13 +10,13 @@ import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')  # Set the backend to 'Agg'
 import time
-
-from FR3Py.sim.my_mj_env import FR3Sim
-from FR3Py.robot.pin_model_bounding_boxes import PinocchioModel
-from FR3Py.robot.bounding_shape_coef_mj import BoundingShapeCoef
+import FR3Py
+from FR3Py.sim.mujoco_with_contact import FR3Sim
+from FR3Py.robot.model_collision_avoidance import PinocchioModel
+from FR3Py.robot.model_collision_avoidance import BoundingShapeCoef
 from cores.utils.utils import seed_everything, save_dict
 from cores.utils.proxsuite_utils import init_proxsuite_qp
-import cores_cpp.diffOptCpp as DOC
+import diffOptHelper as DOC
 from cores.utils.rotation_utils import get_quat_from_rot_matrix, get_Q_matrix_from_quat, get_dQ_matrix
 from cores.utils.control_utils import get_torque_to_track_traj_const_ori
 from cores.configuration.configuration import Configuration
@@ -72,7 +72,7 @@ if __name__ == "__main__":
     initial_joint_angles = test_settings["initial_joint_angles"]
 
     # Mujoco simulation
-    mj_env = FR3Sim(xml_path=os.path.join(ASSETS_PATH, "fr3_mj/fr3_on_table_with_bounding_boxes_wiping.xml"))
+    mj_env = FR3Sim(xml_path=os.path.join(ASSETS_PATH, "mujoco/fr3_on_table_with_bounding_boxes_wiping.xml"))
     mj_env.reset(np.array(initial_joint_angles, dtype = config.np_dtype))
     mj_env.step()
     dt = mj_env.dt
