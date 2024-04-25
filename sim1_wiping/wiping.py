@@ -128,19 +128,21 @@ if __name__ == "__main__":
     gamma2 = CBF_config["gamma2"]
     compensation = CBF_config["compensation"] 
     selected_BBs = CBF_config["selected_bbs"]
-    n_controls = 9
+    n_joints = 7
+    n_fingers = 2
 
     # Define proxuite problem
     print("==> Define proxuite problem")
     n_CBF = len(selected_BBs)
-    cbf_qp = init_proxsuite_qp(n_v=n_controls, n_eq=0, n_in=n_controls+n_CBF)
+    cbf_qp = init_proxsuite_qp(n_v=n_joints, n_eq=0, n_in=n_joints+n_CBF)
 
     # Create records
     print("==> Create records")
     times = np.linspace(0, (horizon-1)*dt, horizon)
-    joint_angles = np.zeros([horizon, n_controls], dtype=config.np_dtype)
-    controls = np.zeros([horizon, 7], dtype=config.np_dtype)
-    desired_controls = np.zeros([horizon, n_controls], dtype=config.np_dtype)
+    joint_angles = np.zeros([horizon, n_joints], dtype=config.np_dtype)
+    finger_positions = np.zeros([horizon, n_fingers], dtype=config.np_dtype)
+    controls = np.zeros([horizon, n_joints], dtype=config.np_dtype)
+    desired_controls = np.zeros([horizon, n_joints], dtype=config.np_dtype)
     phi1s = np.zeros([horizon, n_CBF], dtype=config.np_dtype)
     phi2s = np.zeros([horizon, n_CBF], dtype=config.np_dtype)
     cbf_values = np.zeros([horizon, n_CBF], dtype=config.np_dtype)
@@ -155,9 +157,10 @@ if __name__ == "__main__":
     dyn_info = mj_env.getDynamicsParams()
     joint_info = mj_env.getJointStates()
     finger_info = mj_env.getFingerStates()
-    q = np.concatenate([joint_info["q"], finger_info["q"]])
-    dq = np.concatenate([joint_info["dq"], finger_info["dq"]])
-    pin_info = pin_model.getInfo(q, dq)
+    q = joint_info["q"]
+    dq = joint_info["dq"]
+    pin_info = pin_model.getInfo(np.concatenate([joint_info["q"], finger_info["q"]]),
+                                  np.concatenate([joint_info["dq"], finger_info["dq"]]))
     u_prev = np.squeeze(dyn_info["nle"][:7])
     P_EE_prev = pin_info["P_EE"]
     
@@ -175,22 +178,23 @@ if __name__ == "__main__":
         dyn_info = mj_env.getDynamicsParams()
         joint_info = mj_env.getJointStates()
         finger_info = mj_env.getFingerStates()
-        q = np.concatenate([joint_info["q"], finger_info["q"]])
-        dq = np.concatenate([joint_info["dq"], finger_info["dq"]])
-        pin_info = pin_model.getInfo(q, dq)
+        q = joint_info["q"]
+        dq = joint_info["dq"]
+        pin_info = pin_model.getInfo(np.concatenate([joint_info["q"], finger_info["q"]]),
+                                  np.concatenate([joint_info["dq"], finger_info["dq"]]))
 
-        Minv_mj = dyn_info["Minv"]
-        M_mj = dyn_info["M"]
-        nle_mj = np.squeeze(dyn_info["nle"])
-        tau_mes = joint_info["tau_est"]
+        Minv_mj = dyn_info["Minv"][0:n_joints,0:n_joints] # shape (7,7)
+        M_mj = dyn_info["M"][0:n_joints,0:n_joints] # shape (7,7)
+        nle_mj = np.squeeze(dyn_info["nle"])[0:n_joints] # shape (7,)
+        tau_mes = joint_info["tau_est"][0:n_joints] # shape (7,)
 
-        tau_ext = np.zeros(9, dtype=config.np_dtype)
-        tau_ext[:7] += - nle_mj[:7] + u_prev - tau_mes 
+        tau_ext = np.zeros(n_joints, dtype=config.np_dtype)
+        tau_ext += - nle_mj + u_prev - tau_mes 
 
         P_EE = pin_info["P_EE"]
         R_EE = pin_info["R_EE"]
-        J_EE = pin_info["J_EE"]
-        dJdq_EE = pin_info["dJdq_EE"]
+        J_EE = pin_info["J_EE"][:,0:n_joints] # shape (6,7)
+        dJdq_EE = pin_info["dJdq_EE"] # shape (6,)
         v_EE = J_EE @ dq
 
         # Visualize the trajectory
@@ -213,35 +217,32 @@ if __name__ == "__main__":
 
         # Secondary objective: encourage the joints to remain close to the initial configuration
         W = np.diag(1.0/(joint_ub-joint_lb))
-        q_bar = np.array(test_settings["initial_joint_angles"], dtype=config.np_dtype)
+        q_bar = np.array(test_settings["initial_joint_angles"], dtype=config.np_dtype)[0:n_joints]
         eq = W @ (q - q_bar)
         deq = W @ dq
-        Kp = np.diag([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 50., 50.])
-        Kd = np.diag([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 10., 10.])
+        Kp = np.diag([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
+        Kd = np.diag([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
         u_joint = M_mj @ (- Kd @ deq - Kp @ eq) # larger control only for the fingers
 
         # Compute the input torque
         Spinv = S.T @ np.linalg.pinv(S @ S.T + 0.01* np.eye(S.shape[0]))
-        # Spinv = np.linalg.pinv(S)
         u_nominal = nle_mj + Spinv @ u_task + (np.eye(len(q)) - Spinv @ S) @ u_joint
-        # u_nominal = Spinv @ u_task 
 
-        J_EE_reduced = J_EE[:,:7]
-        F_ext = np.linalg.pinv(J_EE_reduced.T) @ tau_ext[:7]
+        F_ext = np.linalg.pinv(J_EE.T) @ tau_ext
         F_ext_horizontal = F_ext.copy()
         F_ext_horizontal[2] = -2
         F_ext_horizontal[3] = 0
         F_ext_horizontal[4] = 0
         F_ext_horizontal[5] = 0
-        tau_ext_horizontal = J_EE_reduced.T @ F_ext_horizontal
-        u_nominal[:7] += tau_ext_horizontal
+        tau_ext_horizontal = J_EE.T @ F_ext_horizontal
+        u_nominal += tau_ext_horizontal
 
         time_diff_helper_tmp = 0
         if CBF_config["active"]:
             # Matrices for the CBF-QP constraints
-            C = np.zeros([n_controls+n_CBF, n_controls], dtype=config.np_dtype)
-            lb = np.zeros(n_controls+n_CBF, dtype=config.np_dtype)
-            ub = np.zeros(n_controls+n_CBF, dtype=config.np_dtype)
+            C = np.zeros([n_joints+n_CBF, n_joints], dtype=config.np_dtype)
+            lb = np.zeros(n_joints+n_CBF, dtype=config.np_dtype)
+            ub = np.zeros(n_joints+n_CBF, dtype=config.np_dtype)
             CBF_tmp = np.zeros(n_CBF, dtype=config.np_dtype)
             phi1_tmp = np.zeros(n_CBF, dtype=config.np_dtype)
             phi2_tmp = np.zeros(n_CBF, dtype=config.np_dtype)
@@ -250,7 +251,7 @@ if __name__ == "__main__":
                 name_BB = selected_BBs[kk]
                 P_BB = pin_info["P_"+name_BB]
                 R_BB = pin_info["R_"+name_BB]
-                J_BB = pin_info["J_"+name_BB]
+                J_BB = pin_info["J_"+name_BB][:,0:n_joints]
                 dJdq_BB = pin_info["dJdq_"+name_BB]
                 v_BB = J_BB @ dq
                 D_BB = BB_coefs.coefs[name_BB]
@@ -299,7 +300,7 @@ if __name__ == "__main__":
 
             # CBF-QP constraints
             g = -u_nominal
-            C[n_CBF:n_CBF+n_controls,:] = np.eye(n_controls, dtype=config.np_dtype)
+            C[n_CBF:n_CBF+n_joints,:] = np.eye(n_joints, dtype=config.np_dtype)
             lb[n_CBF:] = input_torque_lb
             ub[n_CBF:] = input_torque_ub
             cbf_qp.update(g=g, C=C, l=lb, u=ub)
@@ -321,10 +322,9 @@ if __name__ == "__main__":
             phi2_tmp = np.zeros(n_CBF, dtype=config.np_dtype)
 
         # Step the environment
-        u_prev = u[:7]
+        u_prev = u
         u = u - nle_mj
-        finger_pos = 0.04
-        u = u[:7]
+        finger_pos_fixed = 0.04
         mj_env.setCommands(u)
         mj_env.step()
         time.sleep(max(0,dt-time_control_loop_end+time_control_loop_start))
@@ -332,6 +332,7 @@ if __name__ == "__main__":
         # Record
         P_EE_prev = P_EE
         joint_angles[i,:] = q
+        finger_positions[i,:] = finger_info["q"]
         controls[i,:] = u
         desired_controls[i,:] = u_nominal
         cbf_values[i,:] = CBF_tmp
@@ -348,6 +349,7 @@ if __name__ == "__main__":
     print("==> Save results")
     summary = {"times": times,
                "joint_angles": joint_angles,
+               "finger_positions": finger_positions,
                "controls": controls,
                "desired_controls": desired_controls,
                "phi1s": phi1s,
@@ -376,14 +378,20 @@ if __name__ == "__main__":
     plt.plot(times, joint_angles[:,4], linestyle="-", label=r"$q_5$")
     plt.plot(times, joint_angles[:,5], linestyle="-", label=r"$q_6$")
     plt.plot(times, joint_angles[:,6], linestyle="-", label=r"$q_7$")
-    plt.plot(times, joint_angles[:,7], linestyle="-", label=r"$q_8$")
-    plt.plot(times, joint_angles[:,8], linestyle="-", label=r"$q_9$")
     plt.legend()
     plt.tight_layout()
     plt.savefig(os.path.join(results_dir, 'plot_joint_angles.pdf'))
     plt.close(fig)
 
-    for i in range(7):
+    fig, ax = plt.subplots(figsize=(10,8), dpi=config.dpi, frameon=True)
+    plt.plot(times, finger_positions[:,0], linestyle="-", label=r"$q_{f1}$")
+    plt.plot(times, finger_positions[:,1], linestyle="-", label=r"$q_{f2}$")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(results_dir, 'plot_finger_positions.pdf'))
+    plt.close(fig)
+
+    for i in range(n_joints):
         fig, ax = plt.subplots(figsize=(10,8), dpi=config.dpi, frameon=True)
         plt.plot(times, desired_controls[:,i], color="tab:blue", linestyle=":", 
                 label="u_{:d} nominal".format(i+1))
