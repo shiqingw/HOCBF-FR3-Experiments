@@ -50,6 +50,7 @@ if __name__ == "__main__":
     controller_config = test_settings["controller_config"]
     CBF_config = test_settings["CBF_config"]
     trajectory_config = test_settings["trajectory_config"]
+    controller_config = test_settings["controller_config"]
 
     # Joint limits
     joint_limits_config = test_settings["joint_limits_config"]
@@ -228,8 +229,9 @@ if __name__ == "__main__":
         Spinv = S.T @ np.linalg.pinv(S @ S.T + 0.01* np.eye(S.shape[0]))
         u_nominal = nle_mj + Spinv @ u_task + (np.eye(len(q)) - Spinv @ S) @ u_joint
 
+        max_friction_composation = controller_config["max_friction_compensation"]
         F_ext = np.linalg.pinv(J_EE.T) @ tau_ext
-        F_ext_horizontal = F_ext.copy()
+        F_ext_horizontal = np.clip(F_ext.copy(), -max_friction_composation, max_friction_composation)
         F_ext_horizontal[2] = -2
         F_ext_horizontal[3] = 0
         F_ext_horizontal[4] = 0

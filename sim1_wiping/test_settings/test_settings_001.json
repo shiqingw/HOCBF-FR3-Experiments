@@ -72,6 +72,6 @@
     },
 
     "controller_config":{
-
+        "max_friction_compensation": 100
     }
 }
