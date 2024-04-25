@@ -1,7 +1,7 @@
 ARG UBUNTU_VER=20.04
 ARG CONDA_VER=latest
-# ARG OS_TYPE=x86_64
-ARG OS_TYPE=aarch64
+ARG OS_TYPE=x86_64
+# ARG OS_TYPE=aarch64
 
 FROM ubuntu:${UBUNTU_VER}
 
@@ -11,7 +11,7 @@ ENV PATH="/usr/local/bin:${PATH}"
 
 # System packages 
 RUN apt-get update \
-    && apt-get install -yq curl wget jq vim software-properties-common lsb-release \
+    && apt-get install -yq curl wget jq vim software-properties-common lsb-release net-tools\
     # update cmake
     && apt-key adv --fetch-keys https://apt.kitware.com/keys/kitware-archive-latest.asc \
     && apt-add-repository "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" \
@@ -108,6 +108,8 @@ RUN git clone https://github.com/lcm-proj/lcm.git \
     && cmake .. \
     && make \
     && make install \
+    && cd ../lcm-python\
+    && python -m pip install .\
     && cd ../.. \
     && rm -rf lcm
 
