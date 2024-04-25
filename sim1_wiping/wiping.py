@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')  # Set the backend to 'Agg'
 import time
-import FR3Py
 from FR3Py.sim.mujoco_with_contact import FR3Sim
 from FR3Py.robot.model_collision_avoidance import PinocchioModel
 from FR3Py.robot.model_collision_avoidance import BoundingShapeCoef

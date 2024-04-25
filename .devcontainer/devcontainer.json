@@ -1,7 +1,7 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/docker-existing-dockerfile
 {
-	"name": "Existing Dockerfile",
+	"name": "docker-fr3",
 	"runArgs": ["--privileged"],
 	"build": {
 		// Sets the run context to one level up instead of the .devcontainer folder.
@@ -18,6 +18,11 @@
 	// Uncomment the next line to run commands after the container is created.
 	"postCreateCommand": "cat /etc/os-release",
 
+	// "dockerComposeFile": "docker-compose.yaml",
+  	// "service": "docker-fr3",
+  	"remoteUser": "root", 
+	"workspaceFolder": "/workspaces/HOCBF-FR3-Experiments",
+
 	// Configure tool-specific properties.
 	"customizations": {
 		"vscode": {
@@ -29,13 +34,11 @@
 				"ms-vscode.cmake-tools",
 				"github.copilot",
 				"ms-python.python",
+				"ms-python.debugpy",
 				"ms-python.isort",
 				"ms-python.vscode-pylance",
 				"ms-azuretools.vscode-docker"
 			]
 		}
-	},
-
-	// Uncomment to connect as an existing user other than the container default. More info: https://aka.ms/dev-containers-non-root.
-	// "remoteUser": "devcontainer"
+	}
 }

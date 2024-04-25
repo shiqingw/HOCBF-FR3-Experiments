@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-import sympy as sp
+# import sympy as sp
 from cores.configuration.configuration import Configuration
 config = Configuration()
 
@@ -55,15 +55,15 @@ def get_dQ_matrix(dquat):
                     [-dx, -dy, -dz]], dtype=config.np_dtype)
     return dQ
 
-def sp_get_rot_matrix_from_quat(quat):
-    """
-    The quaternion value is in (qx, qy, qz, qw) format
-    """
-    qx, qy, qz, qw = quat
-    rot_matrix = sp.Matrix([[2*(qw**2+qx**2)-1, 2*(qx*qy-qw*qz), 2*(qx*qz+qw*qy)],
-                            [2*(qx*qy+qw*qz), 2*(qw**2+qy**2)-1, 2*(qy*qz-qw*qx)],
-                            [2*(qx*qz-qw*qy), 2*(qy*qz+qw*qx), 2*(qw**2+qz**2)-1]])
-    return rot_matrix
+# def sp_get_rot_matrix_from_quat(quat):
+#     """
+#     The quaternion value is in (qx, qy, qz, qw) format
+#     """
+#     qx, qy, qz, qw = quat
+#     rot_matrix = sp.Matrix([[2*(qw**2+qx**2)-1, 2*(qx*qy-qw*qz), 2*(qx*qz+qw*qy)],
+#                             [2*(qx*qy+qw*qz), 2*(qw**2+qy**2)-1, 2*(qy*qz-qw*qx)],
+#                             [2*(qx*qz-qw*qy), 2*(qy*qz+qw*qx), 2*(qw**2+qz**2)-1]])
+#     return rot_matrix
 
 def np_get_rot_matrix_from_quat(quat):
     """

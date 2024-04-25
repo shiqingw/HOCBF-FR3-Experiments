@@ -1,0 +1,85 @@
+FROM continuumio/miniconda3
+
+# Set environment variables to non-interactive (this prevents some prompts)
+ENV DEBIAN_FRONTEND=non-interactive
+ENV PATH="/usr/local/bin:${PATH}"
+
+# Run package updates, install packages, and then clean up to reduce layer size
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+    build-essential cmake g++ git wget libatomic1 gfortran perl m4 cmake pkg-config \
+    liblapack-dev libopenblas-dev libgl1-mesa-glx libpoco-dev libeigen3-dev\
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Update Python in the base environment to 3.11
+RUN conda install python==3.11 \
+    && conda clean -afy
+
+# Install the required Python packages
+RUN pip install numpy==1.24.4 \
+    scipy==1.10.1 \
+    matplotlib==3.7.2 \
+    proxsuite \
+    pin==2.6.18 \
+    mujoco \
+    && rm -rf ~/.cache/pip
+
+# Install pybind11, xtensor, xtensor-blas
+RUN conda install -c conda-forge \
+    pybind11 \
+    xtensor \
+    xtensor-blas \
+    # xtensor-python \ 
+    && conda clean -afy
+
+# Install xtensor-python from source
+RUN git clone https://github.com/shiqingw/xtensor-python.git \
+    && cd xtensor-python \
+    && mkdir build \
+    && cd build \
+    && cmake -DCMAKE_INSTALL_PREFIX='/usr/local' .. \
+    && make install \
+    && cd ../.. \
+    && rm -rf xtensor-python
+
+# Install Differentiable-Optimization-Helper
+RUN git clone https://github.com/shiqingw/Differentiable-Optimization-Helper.git\
+    && cd Differentiable-Optimization-Helper \
+    && pip install -e .
+
+# Install FR3Py
+RUN git clone https://github.com/Rooholla-KhorramBakht/FR3Py.git \
+    && cd FR3Py \
+    && pip install -e .\
+    && cd ..
+
+# Install libfranka
+RUN git clone --recursive https://github.com/frankaemika/libfranka --branch 0.10.0 \
+    && cd libfranka \
+    && mkdir build \
+    && cd build \
+    && cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF .. \
+    && cmake --build . \
+    && cpack -G DEB \
+    && dpkg -i libfranka*.deb
+
+# # Setting up the real-time kernel
+RUN apt-get install build-essential bc curl ca-certificates gnupg2 libssl-dev \
+    lsb-release libelf-dev bison flex dwarves zstd libncurses-dev \
+    && curl -SLO https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.4.16.tar.xz \
+    && curl -SLO https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.4.16.tar.sign \
+    && curl -SLO https://www.kernel.org/pub/linux/kernel/projects/rt/5.9/patch-5.9.1-rt20.patch.xz \
+    && curl -SLO https://www.kernel.org/pub/linux/kernel/projects/rt/5.9/patch-5.9.1-rt20.patch.sign 
+
+
+# # Install C++ Bridge
+# RUN cd FR3Py/fr3_bridge \
+#     && mkdir build && cd build \
+#     && cmake .. \
+#     && make -j $(( $(nproc) - 1 )) \
+#     && make \
+#     && make install 
+
+# Spin the container
+CMD ["tail", "-f", "/dev/null"]
