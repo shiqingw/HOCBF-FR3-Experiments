@@ -5,7 +5,7 @@
         "dockerfile": "../Dockerfile"
     },
 	"containerEnv": {
-        // "DISPLAY": "unix:0",
+        "DISPLAY": "unix:0",
         // "ROS_LOCALHOST_ONLY": "1",
         // "ROS_AUTOMATIC_DISCOVERY_RANGE": "LOCALHOST",
         // "ROS_DOMAIN_ID": "42",
@@ -13,17 +13,17 @@
     },
 	"runArgs": [
 		"--privileged",
-        // "--gpus", "all",
-        // "-v",
-        // "/dev:/dev",
-        // "-e",
-        // "DISPLAY=${env:DISPLAY}",
-        // "--ulimit=core=-1",
+        "--gpus", "all",
+        "-v",
+        "/dev:/dev",
+        "-e",
+        "DISPLAY=${env:DISPLAY}",
+        "--ulimit=core=-1",
 		"--net=host"
 	],
 	"mounts": [
-        // "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached",
-        // "source=/dev/dri,target=/dev/dri,type=bind,consistency=cached",
+        "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached",
+        "source=/dev/dri,target=/dev/dri,type=bind,consistency=cached",
         // "source=${localEnv:HOME}/template/logging/,target=/workspaces/logging,type=bind,consistency=cached",
         "source=${localEnv:HOME}/.bash_history,target=/home/dev/.bash_history,type=bind,consistency=cached"
     ],

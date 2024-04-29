@@ -1,7 +1,10 @@
+import mujoco
 import numpy as np
-import diffOptHelper as doh
+from FR3Py.sim.mujoco_with_contact import FR3Sim
+from FR3Py import ASSETS_PATH
 
-a = np.array([1, 2, 3])
-b = np.array([4, 5, 6])
-
-print(doh.getDualVariable(a, b))
+# Mujoco simulation
+mj_env = FR3Sim(xml_path=os.path.join(ASSETS_PATH, "mujoco/fr3.xml"))
+mj_env.reset(np.array(initial_joint_angles, dtype = config.np_dtype))
+mj_env.step()
+dt = mj_env.dt
