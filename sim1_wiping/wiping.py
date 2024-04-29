@@ -223,8 +223,8 @@ if __name__ == "__main__":
         deq = W @ dq
         Kp = np.diag([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
         Kd = np.diag([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
-        u_joint = M_mj @ (- Kd @ deq - Kp @ eq) # larger control only for the fingers
-
+        u_joint = M_mj @ (- Kd @ deq - Kp @ eq)
+        
         # Compute the input torque
         Spinv = S.T @ np.linalg.pinv(S @ S.T + 0.01* np.eye(S.shape[0]))
         u_nominal = nle_mj + Spinv @ u_task + (np.eye(len(q)) - Spinv @ S) @ u_joint

@@ -25,7 +25,7 @@
         // "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached",
         // "source=/dev/dri,target=/dev/dri,type=bind,consistency=cached",
         // "source=${localEnv:HOME}/template/logging/,target=/workspaces/logging,type=bind,consistency=cached",
-        "source=${localEnv:HOME}/.zsh_history,target=/home/dev/.bash_history,type=bind,consistency=cached"
+        "source=${localEnv:HOME}/.bash_history,target=/home/dev/.bash_history,type=bind,consistency=cached"
     ],
 	"postCreateCommand": "cat /etc/os-release",
   	"remoteUser": "root", 
