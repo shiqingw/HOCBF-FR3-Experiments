@@ -178,8 +178,12 @@ if __name__ == "__main__":
         pin_info = pin_model.getInfo(np.concatenate([joint_info["q"], finger_info["q"]]),
                                   np.concatenate([joint_info["dq"], finger_info["dq"]]))
 
-        Minv_mj = dyn_info["Minv"][0:n_joints,0:n_joints] # shape (7,7)
-        M_mj = dyn_info["M"][0:n_joints,0:n_joints] # shape (7,7)
+        # Minv_mj = dyn_info["Minv"][0:n_joints,0:n_joints] # shape (7,7)
+        # M_mj = dyn_info["M"][0:n_joints,0:n_joints] # shape (7,7)
+
+        Minv_mj = pin_info["Minv"][0:n_joints,0:n_joints] # shape (7,7)
+        M_mj = pin_info["M"][0:n_joints,0:n_joints] # shape (7,7)
+
         nle_mj = np.squeeze(dyn_info["nle"])[0:n_joints] # shape (7,)
         tau_mes = joint_info["tau_est"][0:n_joints] # shape (7,)
 
