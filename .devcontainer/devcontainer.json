@@ -44,7 +44,7 @@
 				// "ms-iot.vscode-ros",
 				"ms-python.black-formatter",
 				"ms-python.debugpy",
-				"ms-python.flake8",
+				// "ms-python.flake8",
 				"ms-python.isort",
 				"ms-python.pylint",
 				"ms-python.python",

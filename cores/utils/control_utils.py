@@ -62,10 +62,14 @@ def get_torque_to_track_traj_const_ori(p_d, p_d_dt, p_d_dtdt, R_d, Kp, Kd, Minv,
     Kd: derivative gain, shape (6,6)
     Minv: inverse of mass matrix, shape (n_joints,n_joints)
     J: Jacobian, shape (6,n_joints)
-    dJdq: dJdq, shape (6,)
+    dJ@dq: dJdq, shape (6,)
     dq: current joint velocities, shape (n_joints,)
     p: current position, shape (3,)
     R: current orientation, shape (3,3)
+
+    Returns:
+    G: task jacobian, shape (6,n_joints)
+    u_task: control law, shape (6,)
     """
 
     J_dq = np.dot(J, dq)
@@ -112,6 +116,57 @@ def get_torque_to_track_traj_const_ori(p_d, p_d_dt, p_d_dtdt, R_d, Kp, Kd, Minv,
 
     G = D @ J @ Minv # shape (6,n_joints)
     u_task = -feed_forward - Kp @ e - Kd @ e_dt - D @ dJdq
+
+    return G, u_task
+
+
+def get_torque_to_track_const_ori(R_d, Kp, Kd, Minv, J, dJdq, dq, R):
+    """
+    R_d: desired orientation, shape (3,3)
+    Kp: proportional gain, shape (3,3)
+    Kd: derivative gain, shape (3,3)
+    Minv: inverse of mass matrix, shape (n_joints,n_joints)
+    J: Jacobian, shape (6,n_joints)
+    dJdq: dJ@dq, shape (6,)
+    dq: current joint velocities, shape (n_joints,)
+    R: current orientation, shape (3,3)
+
+    Returns:
+    G: task jacobian, shape (3,n_joints)
+    u_task: control law, shape (3,)
+    """
+
+    J_dq = np.dot(J, dq)
+    omega = J_dq[3:]
+
+    # Quaternion errors
+    quat_d = get_quat_from_rot_matrix(R_d)
+    qv_d = quat_d[:3]
+    qw_d = quat_d[3]
+    quat = get_quat_from_rot_matrix(R)
+    qv = quat[:3]
+    qw = quat[3]
+    S_qv_d = get_skew_symmetric_matrix(qv_d)
+    S_qv = get_skew_symmetric_matrix(qv)
+    qw_dt = - 0.5 * qv @ omega
+    I_3 = np.eye(3).astype(config.np_dtype)
+    qv_dt = 0.5 * (qw * I_3 - S_qv) @ omega
+
+    e_o = qw*qv_d - qw_d*qv - S_qv_d @ qv
+    e_o_dt = qw_dt*qv_d - qw_d*qv_dt - S_qv_d @ qv_dt
+    
+    # All errors
+    e = e_o
+    e_dt = e_o_dt
+
+    # Control law
+    S_qv_dt = get_skew_symmetric_matrix(qv_dt)
+    feed_forward = np.zeros(6, dtype=config.np_dtype)
+    feed_forward = -0.5 * qv_d * (qv_dt @ omega) - 0.5 * (qw_d * I_3 + S_qv_d) @ (qw_dt * I_3 - S_qv_dt) @ omega
+    D = - 0.5 * np.outer(qv_d, qv) - 0.5 * (qw_d * I_3 + S_qv_d) @ (qw * I_3 - S_qv)
+
+    G = D @ J[3:6,:] @ Minv # shape (3,n_joints)
+    u_task = -feed_forward - Kp @ e - Kd @ e_dt - D @ dJdq[3:6]
 
     return G, u_task
 
