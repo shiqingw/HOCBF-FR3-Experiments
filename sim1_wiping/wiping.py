@@ -212,7 +212,7 @@ if __name__ == "__main__":
         Kd = np.diag([20,20,20,100,100,100])
         
         R_d = np.array([[1, 0, 0],
-                        [0, 1, 0],
+                        [0, -1, 0],
                         [0, 0, -1]], dtype=config.np_dtype)
         S, u_task = get_torque_to_track_traj_const_ori(traj[i,:], traj_dt[i,:], traj_dtdt[i,:], R_d, Kp, Kd, Minv_mj, J_EE, dJdq_EE, dq, P_EE, R_EE)
 
