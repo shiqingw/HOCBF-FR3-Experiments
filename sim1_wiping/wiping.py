@@ -21,6 +21,7 @@ from cores.utils.control_utils import get_torque_to_track_traj_const_ori
 from cores.configuration.configuration import Configuration
 from scipy.spatial.transform import Rotation
 from FR3Py import ASSETS_PATH
+from cores.utils.trajectory_utils import TrapezoidalTrajectory, CircularTrajectory
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -89,26 +90,22 @@ if __name__ == "__main__":
     obs_R_np = Rotation.from_quat(obs_quat_np).as_matrix()
     obs_coef_np = obs_R_np @ obs_coef_np @ obs_R_np.T
 
+    mj_env.add_visual_ellipsoid(obs_size_np, obs_pos_np, obs_R_np, np.array([1,0,0,1]), id_geom_offset=0)
+    id_geom_offset = mj_env.viewer.user_scn.ngeom 
+
     # Load the bounding shape coefficients
     BB_coefs = BoundingShapeCoef()
     
     # Compute desired trajectory
-    traj_center = np.array(trajectory_config["center"], dtype=config.np_dtype)
-    traj_radius = trajectory_config["radius"]
-    traj_angular_velocity = trajectory_config["angular_velocity"]
-    horizon = test_settings["horizon_length"]
-    t = np.linspace(0, horizon*dt, horizon+1)
-    traj = np.repeat(traj_center.reshape(1,3), horizon+1, axis=0)
-    traj[:,0] += traj_radius * np.cos(traj_angular_velocity*t)
-    traj[:,1] += traj_radius * np.sin(traj_angular_velocity*t)
-
-    traj_dt = np.zeros([horizon+1, 3], dtype=config.np_dtype)
-    traj_dt[:,0] = -traj_radius * traj_angular_velocity * np.sin(traj_angular_velocity*t)
-    traj_dt[:,1] = traj_radius * traj_angular_velocity * np.cos(traj_angular_velocity*t)
-
-    traj_dtdt = np.zeros([horizon+1, 3], dtype=config.np_dtype)
-    traj_dtdt[:,0] = -traj_radius * traj_angular_velocity**2 * np.cos(traj_angular_velocity*t)
-    traj_dtdt[:,1] = -traj_radius * traj_angular_velocity**2 * np.sin(traj_angular_velocity*t)
+    P_EE_desired = np.array([0.42, 0.50, 0.00])
+    R_EE_desired = np.array([[1, 0, 0],
+                        [0, -1, 0],
+                        [0, 0, -1]])
+    P_EE_initial = np.array([0.30, 0.0, 0.47])
+    via_points = np.array([P_EE_initial, P_EE_desired])
+    target_time = np.array([0, 10])
+    traj1 = TrapezoidalTrajectory(via_points, target_time, T_antp=0.2, Ts=0.01)
+    
 
     # Visualize the trajectory
     N = 100
