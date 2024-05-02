@@ -177,9 +177,9 @@ class CircularTrajectory:
         self.H_b_to_w = H_b_to_w
 
         self.t = np.linspace(0, self.T, int(self.T / Ts) + 1)
-        self.pd_in_body = np.zeros((len(self.t), self.dim))
-        self.pd_dot_in_body = np.zeros((len(self.t), self.dim))
-        self.pd_dot_dot_in_body = np.zeros((len(self.t), self.dim))
+        self.pd = np.zeros((len(self.t), self.dim))
+        self.pd_dot = np.zeros((len(self.t), self.dim))
+        self.pd_dot_dot = np.zeros((len(self.t), self.dim))
 
         self.radius = np.linalg.norm(start_point_in_world - center_in_world)
 
@@ -196,10 +196,9 @@ class CircularTrajectory:
             pd_dot_dot_in_body = np.array([-s_dot_dot * np.sin(phi) - s_dot**2 * np.cos(phi)/self.radius,
                                            s_dot_dot * np.cos(phi) - s_dot**2 * np.sin(phi)/self.radius,
                                            0])
-            self.pd_in_body[i, :] = pd_in_body[:self.dim]
-            self.pd_dot_in_body[i, :] = pd_dot_in_body[:self.dim]
-            self.pd_dot_dot_in_body[i, :] = pd_dot_dot_in_body[:self.dim]
-
+            self.pd[i, :] = (self.H_b_to_w @ np.concatenate([pd_in_body[:self.dim], np.array([1])]))[:self.dim]
+            self.pd_dot[i, :] = self.R_b_to_w @ pd_dot_in_body[:self.dim]
+            self.pd_dot_dot[i, :] = self.R_b_to_w @ pd_dot_dot_in_body[:self.dim]
 
     
     def trapez_vel_profile(self, t, duration, distance):
@@ -259,19 +258,15 @@ class CircularTrajectory:
 
         index = int(np.round(t / self.Ts))
         if index >= len(self.t):
-            pd_in_body = self.pd_in_body[-1, :]
-            pd_dot_in_body = self.pd_dot_in_body[-1, :]
-            pd_dot_dot_in_body = self.pd_dot_dot_in_body[-1, :]
+            pd = self.pd[-1, :]
+            pd_dot = self.pd_dot[-1, :]
+            pd_dot_dot = self.pd_dot_dot[-1, :]
         elif index >= 0 and index < len(self.t):
-            pd_in_body = self.pd_in_body[index, :]
-            pd_dot_in_body = self.pd_dot_in_body[index, :]
-            pd_dot_dot_in_body = self.pd_dot_dot_in_body[index, :]
+            pd = self.pd[index, :]
+            pd_dot = self.pd_dot[index, :]
+            pd_dot_dot = self.pd_dot[index, :]
         else:
             raise ValueError('t out of range')
-        
-        pd_in_world = (self.H_b_to_w @ np.concatenate([pd_in_body, np.array([1])]))[:self.dim]
-        pd_dot_in_world = self.R_b_to_w @ pd_dot_in_body
-        pd_dot_dot_in_world = self.R_b_to_w @ pd_dot_dot_in_body
 
-        return pd_in_world, pd_dot_in_world, pd_dot_dot_in_world
+        return pd, pd_dot, pd_dot_dot
 
