@@ -68,8 +68,8 @@ if __name__ == "__main__":
     cam_azimuth = simulator_config["cam_azimuth"]
     cam_elevation = simulator_config["cam_elevation"]
     cam_lookat = simulator_config["cam_lookat"]
-    base_pos = simulator_config["base_pos"]
-    base_quat = simulator_config["base_quat"]
+    base_pos = np.array(simulator_config["base_pos"])
+    base_quat = np.array(simulator_config["base_quat"])
     initial_joint_angles = test_settings["initial_joint_angles"]
 
     # Mujoco simulation
@@ -93,31 +93,51 @@ if __name__ == "__main__":
     mj_env.add_visual_ellipsoid(obs_size_np, obs_pos_np, obs_R_np, np.array([1,0,0,1]), id_geom_offset=0)
     id_geom_offset = mj_env.viewer.user_scn.ngeom 
 
-    # Load the bounding shape coefficients
-    BB_coefs = BoundingShapeCoef()
+    # Load the bounding shape 
+    eraser_bb_size = np.array([0.088, 0.035])
+    D_np = np.diag(1/eraser_bb_size**2)
     
-    # Compute desired trajectory
-    P_EE_desired = np.array([0.42, 0.50, 0.00])
-    R_EE_desired = np.array([[1, 0, 0],
-                        [0, -1, 0],
-                        [0, 0, -1]])
-    P_EE_initial = np.array([0.30, 0.0, 0.47])
-    via_points = np.array([P_EE_initial, P_EE_desired])
-    target_time = np.array([0, 10])
-    traj1 = TrapezoidalTrajectory(via_points, target_time, T_antp=0.2, Ts=0.01)
-    
+    # Initial pose to pre-wiping pose
+    R_base_to_world = Rotation.from_quat(base_quat).as_matrix()
+    P_base_to_world = base_pos
+    P_EE_pre_wiping = R_base_to_world @ np.array([0.42, 0.45, 0.00]) + P_base_to_world
+    P_EE_initial = R_base_to_world @ np.array([0.30, 0.0, 0.47]) + P_base_to_world
+    via_points = np.array([P_EE_initial, P_EE_pre_wiping])
+    target_time = np.array([0, 5])
+    Ts = 0.01
+    traj_line = TrapezoidalTrajectory(via_points, target_time, T_antp=0.2, Ts=Ts)
 
-    # Visualize the trajectory
     N = 100
-    thetas = np.linspace(0, 2*np.pi, N)
-    traj_circle = np.zeros([N, 3], dtype=config.np_dtype)
-    traj_circle[:,0] = traj_center[0] + traj_radius * np.cos(thetas)
-    traj_circle[:,1] = traj_center[1] + traj_radius * np.sin(thetas)
-    traj_circle[:,2] = 0.83
+    len_traj = len(traj_line.t)
+    sampled = np.linspace(0, len_traj-1, N).astype(int)
+    sampled = traj_line.pd[sampled]
     for i in range(N-1):
-        mj_env.add_visual_capsule(traj_circle[i], traj_circle[i+1], 0.004, np.array([0,0,1,1]))
+        mj_env.add_visual_capsule(sampled[i], sampled[i+1], 0.004, np.array([0,0,1,1]))
         mj_env.viewer.sync()
     id_geom_offset = mj_env.viewer.user_scn.ngeom 
+    
+    # Wiping trajectory
+    duration = 100
+    P_center = R_base_to_world @ np.array([0.32, 0.45, 0.0]) + P_base_to_world
+    nominal_linear_vel = 0.05
+    circle_start_time = target_time[-1]
+    circle_end_time = circle_start_time + duration
+    traj_circle = CircularTrajectory(P_center, P_EE_pre_wiping, nominal_linear_vel, R_base_to_world, 
+                                     circle_start_time, circle_end_time, Ts=Ts)
+    N = 100
+    len_traj = len(traj_circle.t)
+    sampled = np.linspace(0, len_traj-1, N).astype(int)
+    sampled = traj_circle.pd[sampled]
+    for i in range(N-1):
+        mj_env.add_visual_capsule(sampled[i], sampled[i+1], 0.004, np.array([0,0,1,1]), id_geom_offset)
+        mj_env.viewer.sync()
+    id_geom_offset = mj_env.viewer.user_scn.ngeom 
+
+    # Total trajectory
+    traj = np.concatenate([traj_line.pd, traj_circle.pd])
+    traj_dt = np.concatenate([traj_line.pd_dot, traj_circle.pd_dot])
+    traj_dtdt = np.concatenate([traj_line.pd_dot_dot, traj_circle.pd_dot_dot])
+    final_end_time = traj_circle.t[-1]
 
     # CBF parameters
     CBF_config = test_settings["CBF_config"]
@@ -136,6 +156,7 @@ if __name__ == "__main__":
 
     # Create records
     print("==> Create records")
+    horizon = int(final_end_time/dt)
     times = np.linspace(0, (horizon-1)*dt, horizon)
     joint_angles = np.zeros([horizon, n_joints], dtype=config.np_dtype)
     finger_positions = np.zeros([horizon, n_fingers], dtype=config.np_dtype)
@@ -161,7 +182,12 @@ if __name__ == "__main__":
                                   np.concatenate([joint_info["dq"], finger_info["dq"]]))
     u_prev = np.squeeze(dyn_info["nle"][:7])
     P_EE_prev = pin_info["P_EE"]
-    
+
+    size = np.array([0.088, 0.035, 0.01])
+    mj_env.add_visual_ellipsoid(size, pin_info["P_EE"], pin_info["R_EE"], np.array([1,0,0,1]), id_geom_offset=id_geom_offset)
+    eraser_bb_id_offset = mj_env.viewer.user_scn.ngeom - 1
+    id_geom_offset = mj_env.viewer.user_scn.ngeom 
+
     for i in range(horizon):
         all_info.append({
             'dyn_info': dyn_info,
@@ -181,13 +207,10 @@ if __name__ == "__main__":
         pin_info = pin_model.getInfo(np.concatenate([joint_info["q"], finger_info["q"]]),
                                   np.concatenate([joint_info["dq"], finger_info["dq"]]))
 
-        Minv_mj = dyn_info["Minv"][0:n_joints,0:n_joints] # shape (7,7)
-        M_mj = dyn_info["M"][0:n_joints,0:n_joints] # shape (7,7)
-        nle_mj = np.squeeze(dyn_info["nle"])[0:n_joints] # shape (7,)
+        M = pin_info["M"][0:n_joints,0:n_joints]+0.1*np.eye(n_joints) # shape (7,7)
+        Minv = np.linalg.inv(M) # shape (7,7)
+        nle = np.squeeze(pin_info["nle"])[0:n_joints] # shape (7,)
         tau_mes = joint_info["tau_est"][0:n_joints] # shape (7,)
-
-        tau_ext = np.zeros(n_joints, dtype=config.np_dtype)
-        tau_ext += - nle_mj + u_prev - tau_mes 
 
         P_EE = pin_info["P_EE"]
         R_EE = pin_info["R_EE"]
@@ -195,49 +218,67 @@ if __name__ == "__main__":
         dJdq_EE = pin_info["dJdq_EE"] # shape (6,)
         v_EE = J_EE @ dq
 
+        tau_ext = - nle + u_prev - tau_mes # shape (7,)
+
+        size = np.array([0.088, 0.035, 0.01])
+        mj_env.add_visual_ellipsoid(size, P_EE, R_EE, np.array([1,0,0,1]), id_geom_offset=eraser_bb_id_offset)
+
         # Visualize the trajectory
         speed = np.linalg.norm((P_EE-P_EE_prev)/dt)
         rgba=np.array((np.clip(speed/10, 0, 1),
                      np.clip(1-speed/10, 0, 1),
                      .5, 1.))
         radius=.003*(1+speed)
-        # radius=1000*(1+speed)
-        mj_env.add_visual_capsule(P_EE_prev, P_EE, radius, rgba, id_geom_offset, True)
+        # mj_env.add_visual_capsule(P_EE_prev, P_EE, radius, rgba, id_geom_offset, True)
 
         # Primary obejctive: tracking control
-        Kp = np.diag([20,20,20,100,100,100])
-        Kd = np.diag([20,20,20,100,100,100])
+        Kp_task = np.diag([40,40,40,100,100,100])
+        Kd_task = np.diag([30,30,30,50,50,75])
         
         R_d = np.array([[1, 0, 0],
                         [0, -1, 0],
                         [0, 0, -1]], dtype=config.np_dtype)
-        S, u_task = get_torque_to_track_traj_const_ori(traj[i,:], traj_dt[i,:], traj_dtdt[i,:], R_d, Kp, Kd, Minv_mj, J_EE, dJdq_EE, dq, P_EE, R_EE)
+        index = int(np.round(dt*i/Ts))
+        S, u_task = get_torque_to_track_traj_const_ori(traj[index,:], traj_dt[index,:], traj_dtdt[index,:], R_d,
+                                                       Kp_task, Kd_task, Minv, J_EE, dJdq_EE, dq, P_EE, R_EE)
 
-        # Secondary objective: encourage the joints to remain close to the initial configuration
+        if dt*i > circle_start_time:
+            # Second objective 1: apply a force on the z axis to press the end-effector against the table
+            F_press = np.array([0, 0, -10, 0, 0, 0])
+            u_press = J_EE.T @ F_press
+
+            # Second objective 2: apply a force to compensate for the friction
+            mu_friction = 0.6
+            F_ext = np.linalg.pinv(J_EE.T) @ tau_ext
+            z_force = F_ext[2]
+            F_friction = np.zeros(6)
+            if z_force < 0 and np.linalg.norm(v_EE[0:2]) > 0.01:
+                friction = mu_friction * np.abs(z_force)
+                direction = v_EE[0:2]/np.linalg.norm(v_EE[0:2])
+                F_friction[0:2] = direction * friction
+            if z_force < 0 and abs(v_EE[5]) > 0.01:
+                F_friction[5] = np.sign(v_EE[5]) * mu_friction * abs(z_force) * 0.03534
+           
+            u_friction = J_EE.T @ F_friction
+        else:
+            u_press = np.zeros(n_joints)
+            u_friction = np.zeros(n_joints)
+
+        # Third objective: encourage the joints to remain close to the initial configuration
         W = np.diag(1.0/(joint_ub-joint_lb))
         q_bar = np.array(test_settings["initial_joint_angles"], dtype=config.np_dtype)[0:n_joints]
         eq = W @ (q - q_bar)
         deq = W @ dq
-        Kp = np.diag([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
-        Kd = np.diag([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
-        u_joint = M_mj @ (- Kd @ deq - Kp @ eq)
+        Kp_joint = np.diag([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])*20
+        Kd_joint = np.diag([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5])*1
+        u_joint = M @ (- Kd_joint @ deq - Kp_joint @ eq)
         
         # Compute the input torque
         Spinv = S.T @ np.linalg.pinv(S @ S.T + 0.01* np.eye(S.shape[0]))
-        u_nominal = nle_mj + Spinv @ u_task + (np.eye(len(q)) - Spinv @ S) @ u_joint
-
-        max_friction_composation = controller_config["max_friction_compensation"]
-        F_ext = np.linalg.pinv(J_EE.T) @ tau_ext
-        F_ext_horizontal = np.clip(F_ext.copy(), -max_friction_composation, max_friction_composation)
-        F_ext_horizontal[2] = -2
-        F_ext_horizontal[3] = 0
-        F_ext_horizontal[4] = 0
-        F_ext_horizontal[5] = 0
-        tau_ext_horizontal = J_EE.T @ F_ext_horizontal
-        u_nominal += tau_ext_horizontal
+        u_nominal = nle + Spinv @ u_task + (np.eye(len(q)) - Spinv @ S) @ u_joint + u_press + u_friction
 
         time_diff_helper_tmp = 0
-        if CBF_config["active"]:
+        if (CBF_config["active"]) and (dt*i > circle_start_time):
             # Matrices for the CBF-QP constraints
             C = np.zeros([n_joints+n_CBF, n_joints], dtype=config.np_dtype)
             lb = np.zeros(n_joints+n_CBF, dtype=config.np_dtype)
@@ -289,9 +330,9 @@ if __name__ == "__main__":
                 tmp_mat[0:3,0:3] = np.eye(3, dtype=config.np_dtype)
                 tmp_mat[3:7,3:6] = 0.5 * Q
 
-                C[kk,:] = alpha_dx @ tmp_mat @ J_BB @ Minv_mj
+                C[kk,:] = alpha_dx @ tmp_mat @ J_BB @ Minv
                 lb[kk] = - gamma2[kk]*phi1 - gamma1[kk]*dCBF - dx.T @ alpha_dxdx @ dx - alpha_dx @ tmp_vec \
-                        - alpha_dx @ tmp_mat @ dJdq_BB + alpha_dx @ tmp_mat @ J_BB @ Minv_mj @ (nle_mj + tau_ext) + compensation[kk]
+                        - alpha_dx @ tmp_mat @ dJdq_BB + alpha_dx @ tmp_mat @ J_BB @ Minv @ (nle + tau_ext) + compensation[kk]
                 ub[kk] = np.inf
 
                 CBF_tmp[kk] = CBF
@@ -322,9 +363,9 @@ if __name__ == "__main__":
 
         # Step the environment
         u_prev = u
-        u = u - nle_mj
-        finger_pos_fixed = 0.04
-        mj_env.setCommands(u)
+        u = u - nle
+        finger_pos = np.array([0.026, 0.026])
+        mj_env.setCommands(u, finger_pos)
         mj_env.step()
         time.sleep(max(0,dt-time_control_loop_end+time_control_loop_start))
 
@@ -359,8 +400,8 @@ if __name__ == "__main__":
                "time_cbf_qp": time_cbf_qp}
     save_dict(summary, os.path.join(results_dir, 'summary.pkl'))
 
-    print("==> Save all_info")
-    save_dict(all_info, os.path.join(results_dir, 'all_info.pkl'))
+    # print("==> Save all_info")
+    # save_dict(all_info, os.path.join(results_dir, 'all_info.pkl'))
     
     # Visualization
     print("==> Draw plots")

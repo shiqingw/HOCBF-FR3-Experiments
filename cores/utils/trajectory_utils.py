@@ -149,7 +149,7 @@ class TrapezoidalTrajectory:
 
 
 class CircularTrajectory:
-    def __init__(self, center_in_world, start_point_in_world, nominal_linear_velocity, R_b_to_w, T, Ts=0.01):
+    def __init__(self, center_in_world, start_point_in_world, nominal_linear_velocity, R_b_to_w, start_time, end_time, Ts=0.01):
         """
         Create a circular trajectory.
 
@@ -159,13 +159,14 @@ class CircularTrajectory:
             target_time (list or np.array): List of target times for each via point, shape (N+1,).
             linear_velocity (float): linear velocity on the circular trajectory.
             R_b_to_w (np.array): rotation matrix from body frame to world frame, shape (n, n).
-            T (float): total duration.
+            start_time (float): start time.
+            end_time (float): end time.
             Ts (float): Sampling time.
         """
 
         self.center_in_world = center_in_world
         self.start_point_in_world = start_point_in_world
-        self.T = T
+        self.T = end_time - start_time
         self.Ts = Ts
         self.nominal_linear_velocity = nominal_linear_velocity
         self.dim = center_in_world.shape[0]
@@ -176,7 +177,7 @@ class CircularTrajectory:
         H_b_to_w[:self.dim, self.dim] = center_in_world
         self.H_b_to_w = H_b_to_w
 
-        self.t = np.linspace(0, self.T, int(self.T / Ts) + 1)
+        self.t = np.linspace(start_time, end_time, int(self.T / Ts) + 1)
         self.pd = np.zeros((len(self.t), self.dim))
         self.pd_dot = np.zeros((len(self.t), self.dim))
         self.pd_dot_dot = np.zeros((len(self.t), self.dim))
@@ -189,7 +190,7 @@ class CircularTrajectory:
         phi_offset = np.arctan2(start_point_in_body[1], start_point_in_body[0])
         for i in range(len(self.t)):
             t = self.t[i]
-            s, s_dot, s_dot_dot = self.trapez_vel_profile(t, self.T, distance)
+            s, s_dot, s_dot_dot = self.trapez_vel_profile(t- start_time, self.T, distance)
             phi = s / self.radius + phi_offset
             pd_in_body = np.array([self.radius * np.cos(phi), self.radius * np.sin(phi), 0])
             pd_dot_in_body = np.array([-s_dot * np.sin(phi), s_dot * np.cos(phi), 0])
