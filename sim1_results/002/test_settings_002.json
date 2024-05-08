@@ -1,0 +1,72 @@
+{   
+    "seed": 0,
+    "image_save_format": "png",
+    "record": 0,
+    "save_screeshot": 0,
+    "save_rgb": 0,
+    "save_depth": 0,
+    "save_detection": 0,
+    "save_scaling_function": 0,
+    "zero_vel": 0,
+    "horizon_length": 20000,
+    "step_every": 8,
+    "save_every": 24,
+    "_initial_joint_angles": [-0.29256659,  0.34414472,  0.29167903, -2.74919791, -1.0437246, 3.01909617, 1.74139947, 0.04, 0.04],
+    "initial_joint_angles": [0.0,  -0.785,  0.0, -2.356, 0.0, 1.571, 0.785, 0.05, 0.05],
+
+    "joint_limits_config":{
+        "lb":[-2.3093, -1.5133, -2.4937, -2.7478, -2.48, 0.8521, -2.6895],
+        "ub":[2.3093, 1.5133, 2.4937, -0.4461, 2.48, 4.2094, 2.6895]
+    },
+
+    "input_torque_limits_config":{
+        "lb":[-87, -87, -87, -87, -87, -87, -87],
+        "ub":[87, 87, 87, 87, 87, 87, 87]
+    },
+
+    "simulator_config":{
+        "cam_distance": 3.0, 
+        "cam_azimuth": 180,
+        "cam_elevation": -20,
+        "cam_lookat": [-0.25, 0.0, 0.824],
+        "base_pos": [-0.25, 0.0, 0.824],
+        "base_quat": [0, 0, 0, 1]
+    },
+
+    "screenshot_config":{
+        "cameraDistance": 0.8,
+        "cameraYaw": 90,
+        "cameraPitch": -30,
+        "lookat":[0.5, 0.0, 0.4],
+        "pixelWidth": 1280,
+        "pixelHeight": 720,
+        "nearPlane": 0.01,
+        "farPlane": 100,
+        "fov": 90
+    },
+
+    "obstacle_config":{
+        "size": [0.05, 0.05],
+        "pos": [-0.03, 0.5],
+        "quat": [0, 0, 0, 1]
+    },
+
+    "trajectory_config":{
+        "center": [0.25, 0, 0.81],
+        "radius": 0.1,
+        "angular_velocity": 1
+    },
+
+    "CBF_config":{
+        "active": 1,
+        "selected_bbs": ["HAND_BB"],
+        "alpha0": [1.1],
+        "gamma1": [10.0],
+        "gamma2": [10.0],
+        "compensation": [0]
+    },
+
+    "controller_config":{
+        "max_friction_compensation": 100
+    }
+}

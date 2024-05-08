@@ -15,7 +15,7 @@ from FR3Py.robot.model_collision_avoidance import PinocchioModel
 from FR3Py.robot.model_collision_avoidance import BoundingShapeCoef
 from cores.utils.utils import seed_everything, save_dict
 from cores.utils.proxsuite_utils import init_proxsuite_qp
-import diffOptHelper as DOC
+import diffOptHelper as doh
 from cores.utils.rotation_utils import get_quat_from_rot_matrix, get_Q_matrix_from_quat, get_dQ_matrix
 from cores.utils.control_utils import get_torque_to_track_traj_const_ori
 from cores.configuration.configuration import Configuration
@@ -83,24 +83,29 @@ if __name__ == "__main__":
 
     # Load the obstacle
     obstacle_config = test_settings["obstacle_config"]
-    obs_pos_np = np.array(obstacle_config["pos"], dtype=config.np_dtype)
-    obs_quat_np = np.array(obstacle_config["quat"], dtype=config.np_dtype) # (x, y, z, w)
-    obs_size_np = np.array(obstacle_config["size"])
-    obs_coef_np = np.diag(1/obs_size_np**2)
-    obs_R_np = Rotation.from_quat(obs_quat_np).as_matrix()
-    obs_coef_np = obs_R_np @ obs_coef_np @ obs_R_np.T
+    obs_pos_2d = np.array([-0.15, 0.45], dtype=config.np_dtype)
+    obs_size_2d = np.array([0.1, 0.1], dtype=config.np_dtype)
+    obs_orientation_2d = np.deg2rad(0)
+    obs_R_2d = np.array([[np.cos(obs_orientation_2d), -np.sin(obs_orientation_2d)],
+                        [np.sin(obs_orientation_2d), np.cos(obs_orientation_2d)]], dtype=config.np_dtype) 
+    obs_coef_2d = obs_R_2d @ np.diag(1/obs_size_2d**2) @ obs_R_2d.T
 
-    mj_env.add_visual_ellipsoid(obs_size_np, obs_pos_np, obs_R_np, np.array([1,0,0,1]), id_geom_offset=0)
-    id_geom_offset = mj_env.viewer.user_scn.ngeom 
+    obs_pos_3d = np.array([obs_pos_2d[0], obs_pos_2d[1], 0.824], dtype=config.np_dtype)
+    obs_size_3d = np.array([obs_size_2d[0], obs_size_2d[1], 0.01], dtype=config.np_dtype)
+    obs_R_3d = Rotation.from_euler('z', obs_orientation_2d, degrees=True).as_matrix()
+
+    mj_env.add_visual_ellipsoid(obs_size_3d, obs_pos_3d, obs_R_3d, np.array([1,0,0,1]), id_geom_offset=0)
+    id_geom_offset = mj_env.viewer.user_scn.ngeom
 
     # Load the bounding shape 
-    eraser_bb_size = np.array([0.088, 0.035])
-    D_np = np.diag(1/eraser_bb_size**2)
+    eraser_bb_size_2d = np.array([0.088, 0.035])
+    eraser_D_2d = np.diag(1/eraser_bb_size_2d**2)
+    eraser_bb_size_3d = np.array([0.088, 0.035, 0.01])
     
     # Initial pose to pre-wiping pose
     R_base_to_world = Rotation.from_quat(base_quat).as_matrix()
     P_base_to_world = base_pos
-    P_EE_pre_wiping = R_base_to_world @ np.array([0.42, 0.45, 0.00]) + P_base_to_world
+    P_EE_pre_wiping = R_base_to_world @ np.array([0.42, 0.45, 0.02]) + P_base_to_world
     P_EE_initial = R_base_to_world @ np.array([0.30, 0.0, 0.47]) + P_base_to_world
     via_points = np.array([P_EE_initial, P_EE_pre_wiping])
     target_time = np.array([0, 5])
@@ -112,13 +117,13 @@ if __name__ == "__main__":
     sampled = np.linspace(0, len_traj-1, N).astype(int)
     sampled = traj_line.pd[sampled]
     for i in range(N-1):
-        mj_env.add_visual_capsule(sampled[i], sampled[i+1], 0.004, np.array([0,0,1,1]))
-        mj_env.viewer.sync()
-    id_geom_offset = mj_env.viewer.user_scn.ngeom 
-    
+        mj_env.add_visual_capsule(sampled[i], sampled[i+1], 0.004, np.array([0,0,1,1]), id_geom_offset)
+        id_geom_offset = mj_env.viewer.user_scn.ngeom 
+    mj_env.viewer.sync()
+
     # Wiping trajectory
     duration = 100
-    P_center = R_base_to_world @ np.array([0.32, 0.45, 0.0]) + P_base_to_world
+    P_center = R_base_to_world @ np.array([0.32, 0.45, 0.02]) + P_base_to_world
     nominal_linear_vel = 0.05
     circle_start_time = target_time[-1]
     circle_end_time = circle_start_time + duration
@@ -130,8 +135,8 @@ if __name__ == "__main__":
     sampled = traj_circle.pd[sampled]
     for i in range(N-1):
         mj_env.add_visual_capsule(sampled[i], sampled[i+1], 0.004, np.array([0,0,1,1]), id_geom_offset)
-        mj_env.viewer.sync()
-    id_geom_offset = mj_env.viewer.user_scn.ngeom 
+        id_geom_offset = mj_env.viewer.user_scn.ngeom 
+    mj_env.viewer.sync()
 
     # Total trajectory
     traj = np.concatenate([traj_line.pd, traj_circle.pd])
@@ -151,7 +156,7 @@ if __name__ == "__main__":
 
     # Define proxuite problem
     print("==> Define proxuite problem")
-    n_CBF = len(selected_BBs)
+    n_CBF = 1
     cbf_qp = init_proxsuite_qp(n_v=n_joints, n_eq=0, n_in=n_joints+n_CBF)
 
     # Create records
@@ -183,9 +188,16 @@ if __name__ == "__main__":
     u_prev = np.squeeze(dyn_info["nle"][:7])
     P_EE_prev = pin_info["P_EE"]
 
-    size = np.array([0.088, 0.035, 0.01])
-    mj_env.add_visual_ellipsoid(size, pin_info["P_EE"], pin_info["R_EE"], np.array([1,0,0,1]), id_geom_offset=id_geom_offset)
+    mj_env.add_visual_ellipsoid(eraser_bb_size_3d, pin_info["P_EE"], pin_info["R_EE"], np.array([1,0,0,0.1]), id_geom_offset=id_geom_offset)
     eraser_bb_id_offset = mj_env.viewer.user_scn.ngeom - 1
+    id_geom_offset = mj_env.viewer.user_scn.ngeom 
+
+    theta_2d = np.arctan2(pin_info["R_EE"][1,0], pin_info["R_EE"][0,0])
+    R_2d_to_3d = np.array([[np.cos(theta_2d), -np.sin(theta_2d), 0],
+                            [np.sin(theta_2d), np.cos(theta_2d), 0],
+                            [0, 0, 1]], dtype=config.np_dtype)
+    mj_env.add_visual_ellipsoid(eraser_bb_size_3d, pin_info["P_EE"], R_2d_to_3d, np.array([0,1,0,1]), id_geom_offset=id_geom_offset)
+    eraser_bb_id_offset2 = mj_env.viewer.user_scn.ngeom - 1
     id_geom_offset = mj_env.viewer.user_scn.ngeom 
 
     for i in range(horizon):
@@ -210,6 +222,11 @@ if __name__ == "__main__":
         M = pin_info["M"][0:n_joints,0:n_joints]+0.1*np.eye(n_joints) # shape (7,7)
         Minv = np.linalg.inv(M) # shape (7,7)
         nle = np.squeeze(pin_info["nle"])[0:n_joints] # shape (7,)
+
+        # M = dyn_info["M"][0:n_joints,0:n_joints] # shape (7,7)
+        # Minv = dyn_info["Minv"][0:n_joints,0:n_joints] # shape (7,7)
+        # nle = np.squeeze(dyn_info["nle"][0:n_joints]) # shape (7,)
+
         tau_mes = joint_info["tau_est"][0:n_joints] # shape (7,)
 
         P_EE = pin_info["P_EE"]
@@ -218,10 +235,16 @@ if __name__ == "__main__":
         dJdq_EE = pin_info["dJdq_EE"] # shape (6,)
         v_EE = J_EE @ dq
 
+        theta_2d = np.arctan2(pin_info["R_EE"][1,0], pin_info["R_EE"][0,0])
+
         tau_ext = - nle + u_prev - tau_mes # shape (7,)
 
-        size = np.array([0.088, 0.035, 0.01])
-        mj_env.add_visual_ellipsoid(size, P_EE, R_EE, np.array([1,0,0,1]), id_geom_offset=eraser_bb_id_offset)
+        mj_env.add_visual_ellipsoid(eraser_bb_size_3d, P_EE, R_EE, np.array([1,0,0,0.1]), id_geom_offset=eraser_bb_id_offset)
+
+        R_2d_to_3d = np.array([[np.cos(theta_2d), -np.sin(theta_2d), 0],
+                            [np.sin(theta_2d), np.cos(theta_2d), 0],
+                            [0, 0, 1]], dtype=config.np_dtype)
+        mj_env.add_visual_ellipsoid(eraser_bb_size_3d, pin_info["P_EE"], R_2d_to_3d, np.array([0,1,0,1]), id_geom_offset=eraser_bb_id_offset2)
 
         # Visualize the trajectory
         speed = np.linalg.norm((P_EE-P_EE_prev)/dt)
@@ -229,26 +252,35 @@ if __name__ == "__main__":
                      np.clip(1-speed/10, 0, 1),
                      .5, 1.))
         radius=.003*(1+speed)
-        # mj_env.add_visual_capsule(P_EE_prev, P_EE, radius, rgba, id_geom_offset, True)
+        mj_env.add_visual_capsule(P_EE_prev, P_EE, radius, rgba, id_geom_offset, True)
 
         # Primary obejctive: tracking control
         Kp_task = np.diag([40,40,40,100,100,100])
-        Kd_task = np.diag([30,30,30,50,50,75])
+        Kd_task = np.diag([30,30,30,100,100,100])
         
         R_d = np.array([[1, 0, 0],
                         [0, -1, 0],
                         [0, 0, -1]], dtype=config.np_dtype)
         index = int(np.round(dt*i/Ts))
         S, u_task = get_torque_to_track_traj_const_ori(traj[index,:], traj_dt[index,:], traj_dtdt[index,:], R_d,
-                                                       Kp_task, Kd_task, Minv, J_EE, dJdq_EE, dq, P_EE, R_EE)
-
-        if dt*i > circle_start_time:
-            # Second objective 1: apply a force on the z axis to press the end-effector against the table
+                                                    Kp_task, Kd_task, Minv, J_EE, dJdq_EE, dq, P_EE, R_EE)
+        
+        # Secondary objective: encourage the joints to remain close to the initial configuration
+        W = np.diag(1.0/(joint_ub-joint_lb))
+        q_bar = np.array(test_settings["initial_joint_angles"], dtype=config.np_dtype)[0:n_joints]
+        eq = W @ (q - q_bar)
+        deq = W @ dq
+        Kp_joint = np.diag([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])*40
+        Kd_joint = np.diag([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5])*1
+        u_joint = M @ (- Kd_joint @ deq - Kp_joint @ eq)
+        
+        if i*dt >= circle_start_time:
+            # Other 1: apply a force on the z axis to press the end-effector against the table
             F_press = np.array([0, 0, -10, 0, 0, 0])
             u_press = J_EE.T @ F_press
 
-            # Second objective 2: apply a force to compensate for the friction
-            mu_friction = 0.6
+            # Other 2: apply a force to compensate for the friction
+            mu_friction = 0.3
             F_ext = np.linalg.pinv(J_EE.T) @ tau_ext
             z_force = F_ext[2]
             F_friction = np.zeros(6)
@@ -258,27 +290,20 @@ if __name__ == "__main__":
                 F_friction[0:2] = direction * friction
             if z_force < 0 and abs(v_EE[5]) > 0.01:
                 F_friction[5] = np.sign(v_EE[5]) * mu_friction * abs(z_force) * 0.03534
-           
             u_friction = J_EE.T @ F_friction
         else:
             u_press = np.zeros(n_joints)
             u_friction = np.zeros(n_joints)
 
-        # Third objective: encourage the joints to remain close to the initial configuration
-        W = np.diag(1.0/(joint_ub-joint_lb))
-        q_bar = np.array(test_settings["initial_joint_angles"], dtype=config.np_dtype)[0:n_joints]
-        eq = W @ (q - q_bar)
-        deq = W @ dq
-        Kp_joint = np.diag([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])*20
-        Kd_joint = np.diag([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5])*1
-        u_joint = M @ (- Kd_joint @ deq - Kp_joint @ eq)
-        
         # Compute the input torque
         Spinv = S.T @ np.linalg.pinv(S @ S.T + 0.01* np.eye(S.shape[0]))
-        u_nominal = nle + Spinv @ u_task + (np.eye(len(q)) - Spinv @ S) @ u_joint + u_press + u_friction
+        u_nominal = nle + Spinv @ u_task + (np.eye(n_joints) - Spinv @ S) @ u_joint
+
+        states = np.array([P_EE[0], P_EE[1], theta_2d], dtype=config.np_dtype)
+        states_dt = np.array([v_EE[0], v_EE[1], v_EE[5]], dtype=config.np_dtype)
 
         time_diff_helper_tmp = 0
-        if (CBF_config["active"]) and (dt*i > circle_start_time):
+        if (CBF_config["active"]) and (dt*i >= circle_start_time):
             # Matrices for the CBF-QP constraints
             C = np.zeros([n_joints+n_CBF, n_joints], dtype=config.np_dtype)
             lb = np.zeros(n_joints+n_CBF, dtype=config.np_dtype)
@@ -287,52 +312,38 @@ if __name__ == "__main__":
             phi1_tmp = np.zeros(n_CBF, dtype=config.np_dtype)
             phi2_tmp = np.zeros(n_CBF, dtype=config.np_dtype)
 
-            for kk in range(len(selected_BBs)):
-                name_BB = selected_BBs[kk]
-                P_BB = pin_info["P_"+name_BB]
-                R_BB = pin_info["R_"+name_BB]
-                J_BB = pin_info["J_"+name_BB][:,0:n_joints]
-                dJdq_BB = pin_info["dJdq_"+name_BB]
-                v_BB = J_BB @ dq
-                D_BB = BB_coefs.coefs[name_BB]
-                quat_BB = get_quat_from_rot_matrix(R_BB)
+            for kk in range(n_CBF):
+                eraser_pos_2d = states[0:2]
+                eraser_theta = states[2]
+                eraser_R_2d = np.array([[np.cos(eraser_theta), -np.sin(eraser_theta)],
+                                        [np.sin(eraser_theta), np.cos(eraser_theta)]], dtype=config.np_dtype)
                 time_diff_helper_tmp -= time.time()
-                alpha, _, alpha_dx_tmp, alpha_dxdx_tmp = DOC.getGradientAndHessianEllipsoids(P_BB, quat_BB, D_BB, 
-                                R_BB, obs_coef_np, obs_pos_np)
+                alpha, _, alpha_dx_tmp, alpha_dxdx_tmp = doh.getGradientAndHessianEllipses(eraser_pos_2d, eraser_theta, eraser_D_2d,
+                                                                                           eraser_R_2d, obs_coef_2d, obs_pos_2d)
                 time_diff_helper_tmp += time.time()
-                
-                # Order of parameters in alpha_dx_tmp and alpha_dxdx_tmp: [qx, qy, qz, qw, x, y, z]
-                # Convert to the order of [x, y, z, qx, qy, qz, qw]
-                alpha_dx = np.zeros(7, dtype=config.np_dtype)
-                alpha_dx[0:3] = alpha_dx_tmp[4:7]
-                alpha_dx[3:7] = alpha_dx_tmp[0:4]
 
-                alpha_dxdx = np.zeros((7, 7), dtype=config.np_dtype)
-                alpha_dxdx[0:3,0:3] = alpha_dxdx_tmp[4:7,4:7]
-                alpha_dxdx[3:7,3:7] = alpha_dxdx_tmp[0:4,0:4]
-                alpha_dxdx[0:3,3:7] = alpha_dxdx_tmp[4:7,0:4]
-                alpha_dxdx[3:7,0:3] = alpha_dxdx_tmp[0:4,4:7]
+                # Order of parameters in alpha_dx_tmp and alpha_dxdx_tmp: [theta, x, y]
+                # Convert to the order of [x, y, theta]
+                alpha_dx = np.zeros(3, dtype=config.np_dtype)
+                alpha_dx[0:2] = alpha_dx_tmp[1:3]
+                alpha_dx[2] = alpha_dx_tmp[0]
+ 
+                alpha_dxdx = np.zeros((3, 3), dtype=config.np_dtype)
+                alpha_dxdx[0:2,0:2] = alpha_dxdx_tmp[1:3,1:3]
+                alpha_dxdx[2,2] = alpha_dxdx_tmp[0,0]
+                alpha_dxdx[0:2,2] = alpha_dxdx_tmp[0,1:3]
+                alpha_dxdx[2,0:2] = alpha_dxdx_tmp[1:3,0]
 
                 # CBF-QP constraints
-                dx = np.zeros(7, dtype=config.np_dtype)
-                dx[0:3] = v_BB[0:3]
-                Q = get_Q_matrix_from_quat(quat_BB) # shape (4,3)
-                dquat = 0.5 * Q @ v_BB[3:6] # shape (4,)
-                dx[3:7] = dquat 
-                dCBF =  alpha_dx @ dx # scalar
+                dCBF =  alpha_dx @ states_dt # scalar
                 CBF = alpha - alpha0[kk]
                 phi1 = dCBF + gamma1[kk] * CBF
 
-                dQ = get_dQ_matrix(dquat) # shape (4,3)
-                tmp_vec = np.zeros(7, dtype=config.np_dtype)
-                tmp_vec[3:7] = 0.5 * dQ @ v_BB[3:6] # shape (4,)
-                tmp_mat = np.zeros((7,6), dtype=config.np_dtype)
-                tmp_mat[0:3,0:3] = np.eye(3, dtype=config.np_dtype)
-                tmp_mat[3:7,3:6] = 0.5 * Q
-
-                C[kk,:] = alpha_dx @ tmp_mat @ J_BB @ Minv
-                lb[kk] = - gamma2[kk]*phi1 - gamma1[kk]*dCBF - dx.T @ alpha_dxdx @ dx - alpha_dx @ tmp_vec \
-                        - alpha_dx @ tmp_mat @ dJdq_BB + alpha_dx @ tmp_mat @ J_BB @ Minv @ (nle + tau_ext) + compensation[kk]
+                C[kk,:] = alpha_dx @ (J_EE @ Minv)[[0,1,5],:]
+                # lb[kk] = - gamma2[kk]*phi1 - gamma1[kk]*dCBF - dx.T @ alpha_dxdx @ dx - alpha_dx @ dJdq_EE[[0,1,5]]\
+                #         + alpha_dx @ (J_EE @ Minv @ (nle + u_friction + u_press))[[0,1,5]] + compensation[kk]
+                lb[kk] = - gamma2[kk]*phi1 - gamma1[kk]*dCBF - states_dt.T @ alpha_dxdx @ states_dt - alpha_dx @ dJdq_EE[[0,1,5]]\
+                        + alpha_dx @ (J_EE @ Minv @ (nle ))[[0,1,5]] + compensation[kk]
                 ub[kk] = np.inf
 
                 CBF_tmp[kk] = CBF
@@ -362,6 +373,7 @@ if __name__ == "__main__":
             phi2_tmp = np.zeros(n_CBF, dtype=config.np_dtype)
 
         # Step the environment
+        u = u + u_friction + u_press
         u_prev = u
         u = u - nle
         finger_pos = np.array([0.026, 0.026])
