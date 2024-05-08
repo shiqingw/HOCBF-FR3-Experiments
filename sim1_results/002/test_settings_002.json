@@ -60,10 +60,10 @@
     "CBF_config":{
         "active": 1,
         "selected_bbs": ["HAND_BB"],
-        "alpha0": [1.1],
+        "alpha0": [1.3],
         "gamma1": [10.0],
         "gamma2": [10.0],
-        "compensation": [0]
+        "compensation": [2]
     },
 
     "controller_config":{

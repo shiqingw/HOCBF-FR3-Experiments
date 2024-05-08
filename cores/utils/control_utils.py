@@ -161,7 +161,6 @@ def get_torque_to_track_const_ori(R_d, Kp, Kd, Minv, J, dJdq, dq, R):
 
     # Control law
     S_qv_dt = get_skew_symmetric_matrix(qv_dt)
-    feed_forward = np.zeros(6, dtype=config.np_dtype)
     feed_forward = -0.5 * qv_d * (qv_dt @ omega) - 0.5 * (qw_d * I_3 + S_qv_d) @ (qw_dt * I_3 - S_qv_dt) @ omega
     D = - 0.5 * np.outer(qv_d, qv) - 0.5 * (qw_d * I_3 + S_qv_d) @ (qw * I_3 - S_qv)
 
@@ -169,4 +168,41 @@ def get_torque_to_track_const_ori(R_d, Kp, Kd, Minv, J, dJdq, dq, R):
     u_task = -feed_forward - Kp @ e - Kd @ e_dt - D @ dJdq[3:6]
 
     return G, u_task
+
+def get_domega_to_track_const_ori(R_d, Kp, Kd, omega, R):
+    """
+    R_d: desired orientation, shape (3,3)
+    Kp: proportional gain, shape (3,3)
+    Kd: derivative gain, shape (3,3)
+    omega: current angular velocity, shape (3,)
+    R: current orientation, shape (3,3)
+
+    Returns:
+    domega: control law, shape (3,)
+    """
+
+    # Quaternion errors
+    quat_d = get_quat_from_rot_matrix(R_d)
+    qv_d = quat_d[:3]
+    qw_d = quat_d[3]
+    quat = get_quat_from_rot_matrix(R)
+    qv = quat[:3]
+    qw = quat[3]
+    S_qv_d = get_skew_symmetric_matrix(qv_d)
+    S_qv = get_skew_symmetric_matrix(qv)
+    qw_dt = - 0.5 * qv @ omega
+    I_3 = np.eye(3).astype(config.np_dtype)
+    qv_dt = 0.5 * (qw * I_3 - S_qv) @ omega
+
+    e_o = qw*qv_d - qw_d*qv - S_qv_d @ qv
+    e_o_dt = qw_dt*qv_d - qw_d*qv_dt - S_qv_d @ qv_dt
+    
+    # Control law
+    S_qv_dt = get_skew_symmetric_matrix(qv_dt)
+    feed_forward = -0.5 * qv_d * (qv_dt @ omega) - 0.5 * (qw_d * I_3 + S_qv_d) @ (qw_dt * I_3 - S_qv_dt) @ omega
+    D = - 0.5 * np.outer(qv_d, qv) - 0.5 * (qw_d * I_3 + S_qv_d) @ (qw * I_3 - S_qv)
+
+    domega = np.linalg.solve(D, -feed_forward - Kp @ e_o - Kd @ e_o_dt)
+
+    return domega
 
