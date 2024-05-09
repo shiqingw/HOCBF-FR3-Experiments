@@ -16,7 +16,6 @@ from FR3Py.robot.model_collision_avoidance import BoundingShapeCoef
 from cores.utils.utils import seed_everything, save_dict
 from cores.utils.proxsuite_utils import init_proxsuite_qp
 import diffOptHelper as doh
-from cores.utils.rotation_utils import get_quat_from_rot_matrix, get_Q_matrix_from_quat, get_dQ_matrix
 from cores.utils.control_utils import get_torque_to_track_traj_const_ori, get_domega_to_track_const_ori
 from cores.configuration.configuration import Configuration
 from scipy.spatial.transform import Rotation
@@ -374,7 +373,6 @@ if __name__ == "__main__":
             
             # Teriary Objective: encourage the joints to remain close to the initial configuration
             W = np.diag(1.0/(joint_ub-joint_lb))
-            q_bar = np.array(test_settings["initial_joint_angles"], dtype=config.np_dtype)[0:n_joints]
             eq = W @ (q - q_bar)
             deq = W @ dq
             Kp_joint = np.diag([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])*20

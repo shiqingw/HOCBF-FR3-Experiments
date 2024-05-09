@@ -15,7 +15,7 @@
 ```bash
 sudo python3 ~/FR3Py/tools/multicast_config.py <interface_name> # e.g. enp3s0f0
 ```
-3. On the another computer, run `ifconfig` agai. Open the terminal and run the following command to connect to the middle computer.
+3. On the another computer, run `ifconfig` again. Open the terminal and run the following command to connect to the middle computer.
 ```bash
 sudo python3 FR3Py/tools/multicast_config.py <interface_name> # e.g. enp0s31f6
 ```
