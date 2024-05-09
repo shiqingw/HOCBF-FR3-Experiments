@@ -103,9 +103,10 @@ if __name__ == "__main__":
     eraser_bb_size_3d = np.array([0.088, 0.035, 0.01])
     
     # Initial pose to pre-wiping pose
+    into_surface = 0.0
     R_base_to_world = Rotation.from_quat(base_quat).as_matrix()
     P_base_to_world = base_pos
-    P_EE_pre_wiping = R_base_to_world @ np.array([0.42, 0.45, 0.0]) + P_base_to_world
+    P_EE_pre_wiping = R_base_to_world @ np.array([0.42, 0.45, into_surface]) + P_base_to_world
     P_EE_initial = R_base_to_world @ np.array([0.30, 0.0, 0.47]) + P_base_to_world
     via_points = np.array([P_EE_initial, P_EE_pre_wiping])
     target_time = np.array([0, 5])
@@ -123,7 +124,7 @@ if __name__ == "__main__":
 
     # Wiping trajectory
     duration = 100
-    P_center = R_base_to_world @ np.array([0.32, 0.45, 0.0]) + P_base_to_world
+    P_center = R_base_to_world @ np.array([0.32, 0.45, into_surface]) + P_base_to_world
     nominal_linear_vel = 0.05
     circle_start_time = target_time[-1]
     circle_end_time = circle_start_time + duration
@@ -363,8 +364,8 @@ if __name__ == "__main__":
             Kd_z = 30
             dv[2] = traj_dtdt[index,2] - Kp_z * (P_EE[2] - traj[index,2]) - Kd_z * (v_EE[2] - traj_dt[index,2])
 
-            Kp_ori = np.diag([100,100,100]).astype(config.np_dtype)
-            Kd_ori = np.diag([75,75,75]).astype(config.np_dtype)
+            Kp_ori = np.diag([200,200,200]).astype(config.np_dtype)
+            Kd_ori = np.diag([50,50,50]).astype(config.np_dtype)
             R_d = np.array([[1, 0, 0],
                             [0, -1, 0],
                             [0, 0, -1]], dtype=config.np_dtype)
@@ -381,7 +382,7 @@ if __name__ == "__main__":
             u_joint = M @ (- Kd_joint @ deq - Kp_joint @ eq)
 
             # Other 1: apply a force on the z axis to press the end-effector against the table
-            F_press = np.array([0, 0, -10, 0, 0, 0])
+            F_press = np.array([0, 0, 0, 0, 0, 0])
             u_press = J_EE.T @ F_press
 
             # Other 2: apply a force to compensate for the friction
