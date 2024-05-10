@@ -115,11 +115,19 @@ RUN git clone https://github.com/lcm-proj/lcm.git \
 
 # Install C++ Bridge
 RUN cd FR3Py/fr3_bridge \
-&& mkdir build && cd build \
-&& cmake .. \
-&& make -j $(( $(nproc) - 1 )) \
-&& make \
-&& make install 
+    && mkdir build \
+    && cd build \
+    && cmake .. \
+    && make -j $(( $(nproc) - 1 )) \
+    && make \
+    && make install \
+    && cd ../.. 
+
+# Install liegroups
+RUN git clone https://github.com/utiasSTARS/liegroups.git \
+    && cd liegroups \
+    && pip install -e . \
+    && cd ..
 
 # # Setting up the real-time kernel
 # RUN apt-get update \
