@@ -1,6 +1,7 @@
 import numpy as np
+from scipy.spatial.transform import Rotation
 
-class TrapezoidalTrajectory:
+class PositionTrapezoidalTrajectory:
     def __init__(self, via_points, target_time, T_antp=0.2, Ts=0.01):
         """
         Create a trapezoidal velocity profile for a point-to-point motion.
@@ -28,7 +29,7 @@ class TrapezoidalTrajectory:
             self.start_times[i] = target_time[i] - i * T_antp
             self.finish_times[i] = target_time[i + 1] - i * T_antp
 
-        self.t = np.linspace(0, target_time[-1], int(target_time[-1] / Ts) + 1)
+        self.t = np.linspace(target_time[0], target_time[-1], int((target_time[-1]-target_time[0]) / Ts) + 1)
         self.pd = np.zeros((len(self.t), self.dim)) + via_points[0, :]
         self.pd_dot = np.zeros((len(self.t), self.dim))
         self.pd_dot_dot = np.zeros((len(self.t), self.dim))
@@ -36,8 +37,8 @@ class TrapezoidalTrajectory:
         for i in range(self.N):
             start_time = self.start_times[i]
             finish_time = self.finish_times[i]
-            start_index = int(np.round(start_time / Ts))
-            finish_index = int(np.round(finish_time / Ts))
+            start_index = int(np.round((start_time-target_time[0]) / Ts))
+            finish_index = int(np.round((finish_time-target_time[0]) / Ts))
             distance = self.distances[i]
             diff_vector = self.diff_vectors[i, :]
             for j in range(start_index, finish_index + 1):
@@ -139,7 +140,7 @@ class TrapezoidalTrajectory:
             pd_dot_dot (np.array): Acceleration trajectory, shape (dim,).
         """
 
-        index = int(np.round(t / self.Ts))
+        index = int(np.round((t-self.target_time[0]) / self.Ts))
         if index >= len(self.t):
             return self.pd[-1, :], self.pd_dot[-1, :], self.pd_dot_dot[-1, :]
         elif index >= 0 and index < len(self.t):
@@ -147,6 +148,129 @@ class TrapezoidalTrajectory:
         else:
             raise ValueError('t out of range')
 
+
+class OrientationTrapezoidalTrajectory:
+    def __init__(self, orientations, target_time, Ts=0.01):
+        """
+        Create a trapezoidal velocity profile for a point-to-point motion.
+
+        Args:
+            orientations (list of np.array): List of orientations wrt base/world frame.
+            target_time (list or np.array): List of target times for each via point, shape (2,).
+            Ts (float): Sampling time.
+        """
+            
+        self.Ts = Ts
+        self.target_time = target_time
+        self.N = len(orientations)-1
+        self.axes = np.zeros((self.N,3))
+        self.angles = np.zeros(self.N)
+
+        for i in range(self.N):
+            R_i = orientations[i]
+            R_f = orientations[i+1]
+            R_f_i = R_i.T @ R_f
+            axis_angle = np.squeeze(Rotation.from_matrix(R_f_i).as_rotvec())
+            angle = np.linalg.norm(axis_angle)
+            if abs(angle) < 1e-5:
+                raise ValueError("Rotation too small")
+            axis = axis_angle/angle
+
+            self.axes[i,:] = axis
+            self.angles[i] = angle
+
+        self.start_times = np.zeros(self.N)
+        self.finish_times = np.zeros(self.N)
+        for i in range(self.N):
+            self.start_times[i] = target_time[i]
+            self.finish_times[i] = target_time[i + 1]
+
+        self.t = np.linspace(target_time[0], target_time[-1], int((target_time[-1]-target_time[0]) / Ts) + 1)
+        self.pd = np.zeros((len(self.t), 3, 3))
+        self.pd_dot = np.zeros((len(self.t), 3))
+        self.pd_dot_dot = np.zeros((len(self.t), 3))
+
+        for i in range(self.N):
+            start_time = self.start_times[i]
+            finish_time = self.finish_times[i]
+            start_index = int(np.round((start_time-target_time[0]) / Ts))
+            finish_index = int(np.round((finish_time-target_time[0]) / Ts))
+            angle = self.angles[i]
+            axis = self.axes[i,:]
+            rot_mat_base = orientations[i]
+            for j in range(start_index, finish_index + 1):
+                current_t = self.t[j]
+                s, s_dot, s_dot_dot = self.trapez_vel_profile(current_t - start_time, finish_time - start_time, angle)
+                self.pd[j, :, :] = rot_mat_base @ Rotation.from_rotvec(s * axis).as_matrix()
+                self.pd_dot[j, :] = s_dot * axis
+                self.pd_dot_dot[j, :] = s_dot_dot * axis
+            if finish_index < len(self.t):
+                self.pd[finish_index + 1:, :,:] = orientations[i+1]
+
+
+    def trapez_vel_profile(self, t, duration, distance):
+        """
+        Create a trapezoidal velocity profile for a point-to-point motion.
+
+        Args:
+            t (float): Current time.
+            duration (float): Total duration of the motion.
+            distance (float): Distance to travel.
+
+        Returns:
+            s: Position at time t.
+            s_dot: Velocity at time t.
+            s_dot_dot: Acceleration at time t.
+        """
+
+        qc_dot_dot = 0.1
+        while qc_dot_dot < 4 * distance / duration**2:
+            qc_dot_dot = 2 * qc_dot_dot
+
+        tc = duration / 2 - np.sqrt((duration**2 * qc_dot_dot - 4 * distance) / qc_dot_dot) / 2
+
+        if 0 <= t <= tc:
+            s = qc_dot_dot * t**2 / 2
+            s_dot = qc_dot_dot * t
+            s_dot_dot = qc_dot_dot
+        elif tc < t <= duration - tc:
+            s = qc_dot_dot * tc * (t - tc / 2)
+            s_dot = qc_dot_dot * tc
+            s_dot_dot = 0
+        elif duration - tc < t <= duration:
+            s = distance - qc_dot_dot * (duration - t)**2 / 2
+            s_dot = qc_dot_dot * (duration - t)
+            s_dot_dot = -qc_dot_dot
+        elif t > duration:
+            s = distance
+            s_dot = 0
+            s_dot_dot = 0
+        else:
+            raise ValueError('t out of range')
+
+        return s, s_dot, s_dot_dot
+
+    
+    def get_traj_and_ders(self, t):
+        """
+        Create a trapezoidal velocity profile for a point-to-point motion.
+
+        Args:
+            t (float): Current time.
+
+        Returns:
+            pd (np.array): Position trajectory, shape (3,3).
+            pd_dot (np.array): Velocity trajectory, shape (3,).
+            pd_dot_dot (np.array): Acceleration trajectory, shape (3,).
+        """
+
+        index = int(np.round((t-self.target_time[0]) / self.Ts))
+        if index >= len(self.t):
+            return self.pd[-1, :, :], self.pd_dot[-1, :], self.pd_dot_dot[-1, :]
+        elif index >= 0 and index < len(self.t):
+            return self.pd[index, :, :], self.pd_dot[index, :], self.pd_dot_dot[index, :]
+        else:
+            raise ValueError('t out of range')
 
 class CircularTrajectory:
     def __init__(self, center_in_world, start_point_in_world, nominal_linear_velocity, R_b_to_w, start_time, end_time, Ts=0.01):
