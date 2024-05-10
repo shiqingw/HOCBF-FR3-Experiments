@@ -105,7 +105,7 @@ if __name__ == "__main__":
     eraser_bb_size_3d = np.array([0.088, 0.035, 0.01])
     
     # Initial pose to pre-wiping pose
-    into_surface = 0.1
+    into_surface = -0.01
     P_EE_pre_wiping = R_base_to_world @ np.array([0.42, 0.50, into_surface]) + P_base_to_world
     P_EE_initial = R_base_to_world @ np.array([0.30, 0.0, 0.47]) + P_base_to_world
     via_points = np.array([P_EE_initial, P_EE_pre_wiping])
@@ -158,7 +158,7 @@ if __name__ == "__main__":
     # Define proxuite problem
     print("==> Define proxuite problem")
     n_CBF = 1
-    cbf_qp = init_proxsuite_qp(n_v=2, n_eq=0, n_in=n_CBF)
+    cbf_qp = init_proxsuite_qp(n_v=n_joints, n_eq=3, n_in=n_CBF + n_joints)
 
     # Create records
     print("==> Create records")
@@ -167,8 +167,8 @@ if __name__ == "__main__":
     joint_angles = np.zeros([horizon, n_joints], dtype=config.np_dtype)
     finger_positions = np.zeros([horizon, n_fingers], dtype=config.np_dtype)
     controls = np.zeros([horizon, n_joints], dtype=config.np_dtype)
-    desired_controls = np.zeros([horizon, 2], dtype=config.np_dtype)
-    safe_controls = np.zeros([horizon, 2], dtype=config.np_dtype)
+    desired_controls = np.zeros([horizon, n_joints], dtype=config.np_dtype)
+    safe_controls = np.zeros([horizon, n_joints], dtype=config.np_dtype)
     phi1s = np.zeros([horizon, n_CBF], dtype=config.np_dtype)
     phi2s = np.zeros([horizon, n_CBF], dtype=config.np_dtype)
     cbf_values = np.zeros([horizon, n_CBF], dtype=config.np_dtype)
@@ -270,11 +270,11 @@ if __name__ == "__main__":
             e_rot_dt = v_EE[3:] # shape (3,)
             omega_dt = -K_p_rot @ e_rot - K_d_rot @ e_rot_dt
 
-            dv_EE = np.concatenate([v_dt, omega_dt])
+            v_EE_dt_desired = np.concatenate([v_dt, omega_dt])
             S = J_EE
             S_pinv = S.T @ np.linalg.pinv(S @ S.T + 0.01* np.eye(S.shape[0]))
             S_null = (np.eye(len(q)) - S_pinv @ S)
-            q_dtdt = S_pinv @ (dv_EE - dJdq_EE)
+            q_dtdt_task = S_pinv @ (v_EE_dt_desired - dJdq_EE)
 
             # Secondary objective: encourage the joints to remain close to the initial configuration
             W = np.diag(1.0/(joint_ub-joint_lb))
@@ -283,12 +283,13 @@ if __name__ == "__main__":
             e_joint_dot = W @ dq
             Kp_joint = 20*np.diag([1, 1, 1, 1, 1, 1, 1]).astype(config.np_dtype)
             Kd_joint = 10*np.diag([1, 1, 1, 1, 1, 1, 1]).astype(config.np_dtype)
-            q_dtdt += S_null @ (- Kp_joint @ e_joint - Kd_joint @ e_joint_dot)
+            q_dtdt = q_dtdt_task + S_null @ (- Kp_joint @ e_joint - Kd_joint @ e_joint_dot)
 
             # Map to torques
             u = nle + M @ q_dtdt
 
         if i*dt >= circle_start_time:
+            # Primary obejctive: tracking control
             K_p_pos = np.diag([40,40,40]).astype(config.np_dtype)
             K_d_pos = np.diag([30,30,30]).astype(config.np_dtype)
             e_pos = P_EE - traj[index,:] # shape (3,)
@@ -298,17 +299,93 @@ if __name__ == "__main__":
             R_d = np.array([[1, 0, 0],
                             [0, -1, 0],
                             [0, 0, -1]], dtype=config.np_dtype)
-            K_p_rot = np.diag([40,40,40]).astype(config.np_dtype)
-            K_d_rot = np.diag([30,30,30]).astype(config.np_dtype)
+            K_p_rot = np.diag([80,80,20]).astype(config.np_dtype)
+            K_d_rot = np.diag([30,30,20]).astype(config.np_dtype)
             e_rot = SO3(R_EE @ R_d.T).log() # shape (3,)
             e_rot_dt = v_EE[3:] # shape (3,)
             omega_dt = -K_p_rot @ e_rot - K_d_rot @ e_rot_dt
 
-            dv_EE = np.concatenate([v_dt, omega_dt])
+            v_EE_dt_desired = np.concatenate([v_dt, omega_dt])
             S = J_EE
             S_pinv = S.T @ np.linalg.pinv(S @ S.T + 0.01* np.eye(S.shape[0]))
             S_null = (np.eye(len(q)) - S_pinv @ S)
-            q_dtdt = S_pinv @ (dv_EE - dJdq_EE)
+            q_dtdt_desired = S_pinv @ (v_EE_dt_desired - dJdq_EE)
+
+            # Filter q_dtdt to be safe
+            states = np.array([P_EE[0], P_EE[1], theta_2d], dtype=config.np_dtype)
+            states_dt = np.array([v_EE[0], v_EE[1], v_EE[5]], dtype=config.np_dtype)
+
+            time_diff_helper_tmp = 0
+            if (CBF_config["active"]):
+                # Matrices for the CBF-QP constraints
+                C = np.zeros([n_CBF+n_joints, n_joints], dtype=config.np_dtype)
+                lb = np.zeros(n_CBF+n_joints, dtype=config.np_dtype)
+                ub = np.zeros(n_CBF+n_joints, dtype=config.np_dtype)
+                A = np.zeros([3, n_joints], dtype=config.np_dtype)
+                b = np.zeros(3, dtype=config.np_dtype)
+                CBF_tmp = np.zeros(n_CBF, dtype=config.np_dtype)
+                phi1_tmp = np.zeros(n_CBF, dtype=config.np_dtype)
+                phi2_tmp = np.zeros(n_CBF, dtype=config.np_dtype)
+
+                for kk in range(n_CBF):
+                    eraser_pos_2d = states[0:2]
+                    eraser_theta = states[2]
+                    eraser_R_2d = np.array([[np.cos(eraser_theta), -np.sin(eraser_theta)],
+                                            [np.sin(eraser_theta), np.cos(eraser_theta)]], dtype=config.np_dtype)
+                    time_diff_helper_tmp -= time.time()
+                    alpha, _, alpha_dx_tmp, alpha_dxdx_tmp = doh.getGradientAndHessianEllipses(eraser_pos_2d, eraser_theta, eraser_D_2d,
+                                                                                            eraser_R_2d, obs_coef_2d, obs_pos_2d)
+                    time_diff_helper_tmp += time.time()
+
+                    # Order of parameters in alpha_dx_tmp and alpha_dxdx_tmp: [theta, x, y]
+                    # Convert to the order of [x, y, theta]
+                    alpha_dx = np.zeros(3, dtype=config.np_dtype)
+                    alpha_dx[0:2] = alpha_dx_tmp[1:3]
+                    alpha_dx[2] = alpha_dx_tmp[0]
+    
+                    alpha_dxdx = np.zeros((3, 3), dtype=config.np_dtype)
+                    alpha_dxdx[0:2,0:2] = alpha_dxdx_tmp[1:3,1:3]
+                    alpha_dxdx[2,2] = alpha_dxdx_tmp[0,0]
+                    alpha_dxdx[0:2,2] = alpha_dxdx_tmp[0,1:3]
+                    alpha_dxdx[2,0:2] = alpha_dxdx_tmp[1:3,0]
+
+                    # CBF-QP constraints
+                    CBF_dt =  alpha_dx @ states_dt # scalar
+                    CBF = alpha - alpha0[kk]
+                    phi1 = CBF_dt + gamma1[kk] * CBF
+
+                    C[kk,:] = alpha_dx @ J_EE[[0,1,5],:]
+                    lb[kk] = - gamma2[kk]*phi1 - gamma1[kk]*CBF_dt - states_dt.T @ alpha_dxdx @ states_dt - alpha_dx @ dJdq_EE[[0,1,5]] + compensation[kk]
+                    ub[kk] = np.inf
+
+                    CBF_tmp[kk] = CBF
+                    phi1_tmp[kk] = phi1
+
+                # Constraints on joint limits
+                for kk in range(n_joints):
+                    C[n_CBF+kk,kk] = 1/2*dt**2
+                    lb[n_CBF+kk] = joint_lb[kk] - dq[kk]*dt - q[kk]
+                    ub[n_CBF+kk] = joint_ub[kk] - dq[kk]*dt - q[kk]
+
+                # CBF-QP constraints
+                A = J_EE[[2,3,4],:]
+                b = v_EE_dt_desired[[2,3,4]] - dJdq_EE[[2,3,4]]
+                g = -q_dtdt_desired
+                cbf_qp.update(g=g, C=C, l=lb, u=ub, A=A, b=b)
+                time_cbf_qp_start = time.time()
+                cbf_qp.solve()
+                time_cbf_qp_end = time.time()
+                q_dtdt_task = cbf_qp.results.x
+                for kk in range(n_CBF):
+                    phi2_tmp[kk] = C[kk,:] @ q_dtdt_task - lb[kk]
+                
+            else:
+                q_dtdt_task = q_dtdt_desired
+                time_cbf_qp_start = 0
+                time_cbf_qp_end = 0
+                CBF_tmp = np.zeros(n_CBF, dtype=config.np_dtype)
+                phi1_tmp = np.zeros(n_CBF, dtype=config.np_dtype)
+                phi2_tmp = np.zeros(n_CBF, dtype=config.np_dtype)
 
             # Secondary objective: encourage the joints to remain close to the initial configuration
             W = np.diag(1.0/(joint_ub-joint_lb))
@@ -317,10 +394,29 @@ if __name__ == "__main__":
             e_joint_dot = W @ dq
             Kp_joint = 20*np.diag([1, 1, 1, 1, 1, 1, 1]).astype(config.np_dtype)
             Kd_joint = 10*np.diag([1, 1, 1, 1, 1, 1, 1]).astype(config.np_dtype)
-            q_dtdt += S_null @ (- Kp_joint @ e_joint - Kd_joint @ e_joint_dot)
+
+            # Final q_dtdt
+            q_dtdt = q_dtdt_task + S_null @ (- Kp_joint @ e_joint - Kd_joint @ e_joint_dot)
 
             # Map to torques
-            u = nle + M @ q_dtdt
+            # Other 1: apply a force on the z axis to press the end-effector against the table
+            F_press = np.array([0, 0, 0, 0, 0, 0])
+            u_press = J_EE.T @ F_press
+
+            # Other 2: apply a force to compensate for the friction
+            mu_friction = 0.3
+            F_ext = np.linalg.pinv(J_EE.T) @ tau_ext
+            z_force = F_ext[2]
+            F_friction = np.zeros(6)
+            if z_force < 0 and np.linalg.norm(v_EE[0:2]) > 0.01:
+                friction = mu_friction * np.abs(z_force)
+                direction = v_EE[0:2]/np.linalg.norm(v_EE[0:2])
+                F_friction[0:2] = direction * friction
+            if z_force < 0 and abs(v_EE[5]) > 0.01:
+                F_friction[5] = np.sign(v_EE[5]) * mu_friction * abs(z_force) * 0.03534
+            u_friction = J_EE.T @ F_friction
+
+            u = nle + M @ q_dtdt + u_press + u_friction
             
         # Step the environment
         time_control_loop_end = time.time()
@@ -336,14 +432,14 @@ if __name__ == "__main__":
         joint_angles[i,:] = q
         finger_positions[i,:] = finger_info["q"]
         controls[i,:] = u
-        # if i*dt >= circle_start_time:
-        #     desired_controls[i,:] = u_2d_nominal
-        #     safe_controls[i,:] = u_2d
-        #     cbf_values[i,:] = CBF_tmp
-        #     phi1s[i,:] = phi1_tmp
-        #     phi2s[i,:] = phi2_tmp
-        #     time_diff_helper[i] = time_diff_helper_tmp
-        #     time_cbf_qp[i] = time_cbf_qp_end - time_cbf_qp_start
+        if i*dt >= circle_start_time:
+            desired_controls[i,:] = q_dtdt_desired
+            safe_controls[i,:] = q_dtdt_task
+            cbf_values[i,:] = CBF_tmp
+            phi1s[i,:] = phi1_tmp
+            phi2s[i,:] = phi2_tmp
+            time_diff_helper[i] = time_diff_helper_tmp
+            time_cbf_qp[i] = time_cbf_qp_end - time_cbf_qp_start
         time_control_loop[i] = time_control_loop_end - time_control_loop_start
 
     # Close the environment
