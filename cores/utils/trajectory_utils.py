@@ -172,9 +172,11 @@ class OrientationTrapezoidalTrajectory:
             R_f_i = R_i.T @ R_f
             axis_angle = np.squeeze(Rotation.from_matrix(R_f_i).as_rotvec())
             angle = np.linalg.norm(axis_angle)
-            if abs(angle) < 1e-5:
-                raise ValueError("Rotation too small")
-            axis = axis_angle/angle
+            if abs(angle) > 1e-6:
+                axis = axis_angle/angle
+            else:
+                axis = np.zeros(3)
+                angle = 0
 
             self.axes[i,:] = axis
             self.angles[i] = angle
@@ -202,8 +204,8 @@ class OrientationTrapezoidalTrajectory:
                 current_t = self.t[j]
                 s, s_dot, s_dot_dot = self.trapez_vel_profile(current_t - start_time, finish_time - start_time, angle)
                 self.pd[j, :, :] = rot_mat_base @ Rotation.from_rotvec(s * axis).as_matrix()
-                self.pd_dot[j, :] = s_dot * axis
-                self.pd_dot_dot[j, :] = s_dot_dot * axis
+                self.pd_dot[j, :] = rot_mat_base @ (s_dot * axis)
+                self.pd_dot_dot[j, :] = rot_mat_base @ (s_dot_dot * axis)
             if finish_index < len(self.t):
                 self.pd[finish_index + 1:, :,:] = orientations[i+1]
 
@@ -222,6 +224,8 @@ class OrientationTrapezoidalTrajectory:
             s_dot: Velocity at time t.
             s_dot_dot: Acceleration at time t.
         """
+        if abs(distance) < 1e-6:
+            return 0, 0, 0
 
         qc_dot_dot = 0.1
         while qc_dot_dot < 4 * distance / duration**2:

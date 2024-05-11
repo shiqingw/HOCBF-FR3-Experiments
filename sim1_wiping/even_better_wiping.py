@@ -24,7 +24,7 @@ from liegroups import SO3
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exp_num', default=3, type=int, help='test case number')
+    parser.add_argument('--exp_num', default=4, type=int, help='test case number')
     args = parser.parse_args()
 
     # Create result directory
@@ -84,7 +84,7 @@ if __name__ == "__main__":
 
     # Load the obstacle
     obstacle_config = test_settings["obstacle_config"]
-    obs_pos_2d_in_base = np.array([0.1, 0.45], dtype=config.np_dtype)
+    obs_pos_2d_in_base = np.array([0.34, 0.57], dtype=config.np_dtype)
     obs_pos_3d = R_base_to_world @ np.array([obs_pos_2d_in_base[0], obs_pos_2d_in_base[1], 0]) + P_base_to_world
     obs_pos_2d = obs_pos_3d[0:2]
     obs_size_2d = np.array([0.1, 0.1], dtype=config.np_dtype)
@@ -105,13 +105,23 @@ if __name__ == "__main__":
     eraser_bb_size_3d = np.array([0.088, 0.035, 0.01])
     
     # Initial pose to pre-wiping pose
-    into_surface = -0.01
-    P_EE_pre_wiping = R_base_to_world @ np.array([0.42, 0.50, into_surface]) + P_base_to_world
+    into_surface = 0.01
+    P_EE_pre_wiping = R_base_to_world @ np.array([0.48, 0.41, into_surface]) + P_base_to_world
     P_EE_initial = R_base_to_world @ np.array([0.30, 0.0, 0.47]) + P_base_to_world
     via_points = np.array([P_EE_initial, P_EE_pre_wiping])
     target_time = np.array([0, 5])
     Ts = 0.01
     traj_line = PositionTrapezoidalTrajectory(via_points, target_time, T_antp=0.2, Ts=Ts)
+
+    R_EE_pre_wiping = np.array([[0, 1, 0],
+                                [1, 0, 0],
+                                [0, 0, -1]], dtype=config.np_dtype)
+    R_EE_initial = np.array([[1, 0, 0],
+                             [0, -1, 0],
+                             [0, 0, -1]], dtype=config.np_dtype)
+    target_time = np.array([0, 5])
+    orientations = np.array([R_EE_initial, R_EE_pre_wiping], dtype=config.np_dtype)
+    traj_orientation = OrientationTrapezoidalTrajectory(orientations, target_time, Ts=Ts)
 
     N = 100
     len_traj = len(traj_line.t)
@@ -124,26 +134,36 @@ if __name__ == "__main__":
 
     # Wiping trajectory
     duration = 100
-    P_center = R_base_to_world @ np.array([0.32, 0.50, into_surface]) + P_base_to_world
-    nominal_linear_vel = 0.05
-    circle_start_time = target_time[-1]
-    circle_end_time = circle_start_time + duration
-    traj_circle = CircularTrajectory(P_center, P_EE_pre_wiping, nominal_linear_vel, R_base_to_world, 
-                                     circle_start_time, circle_end_time, Ts=Ts)
+    P_EE_end_wiping = R_base_to_world @ np.array([0.21, 0.41, into_surface]) + P_base_to_world
+    N_back_and_forth = 20
+    via_points = np.zeros((N_back_and_forth,3), dtype=config.np_dtype)
+    wiping_start_time = target_time[-1]
+    target_time = np.linspace(wiping_start_time, wiping_start_time + duration, N_back_and_forth+1)
+    for i in range(N_back_and_forth):
+        if i % 2 == 0:
+            via_points[i,:] = P_EE_pre_wiping
+        else:
+            via_points[i,:] =P_EE_end_wiping
+
+    traj_wiping = PositionTrapezoidalTrajectory(via_points, target_time, T_antp=0.2, Ts=Ts)
+
     N = 100
-    len_traj = len(traj_circle.t)
+    len_traj = len(traj_wiping.t)
     sampled = np.linspace(0, len_traj-1, N).astype(int)
-    sampled = traj_circle.pd[sampled]
+    sampled = traj_wiping.pd[sampled]
     for i in range(N-1):
         mj_env.add_visual_capsule(sampled[i], sampled[i+1], 0.004, np.array([0,0,1,1]), id_geom_offset)
         id_geom_offset = mj_env.viewer.user_scn.ngeom 
     mj_env.viewer.sync()
 
     # Total trajectory
-    traj = np.concatenate([traj_line.pd, traj_circle.pd])
-    traj_dt = np.concatenate([traj_line.pd_dot, traj_circle.pd_dot])
-    traj_dtdt = np.concatenate([traj_line.pd_dot_dot, traj_circle.pd_dot_dot])
-    final_end_time = traj_circle.t[-1]
+    traj_pos = np.concatenate([traj_line.pd, traj_wiping.pd])
+    traj_pos_dt = np.concatenate([traj_line.pd_dot, traj_wiping.pd_dot])
+    traj_pos_dtdt = np.concatenate([traj_line.pd_dot_dot, traj_wiping.pd_dot_dot])
+    traj_rot = traj_orientation.pd
+    traj_rot_dt = traj_orientation.pd_dot
+    traj_rot_dtdt = traj_orientation.pd_dot_dot
+    final_end_time = traj_wiping.t[-1]
 
     # CBF parameters
     CBF_config = test_settings["CBF_config"]
@@ -222,7 +242,6 @@ if __name__ == "__main__":
                                   np.concatenate([joint_info["dq"], finger_info["dq"]]))
 
         M = pin_info["M"][0:n_joints,0:n_joints]+0.1*np.eye(n_joints) # shape (7,7)
-        Minv = np.linalg.inv(M) # shape (7,7)
         nle = np.squeeze(pin_info["nle"])[0:n_joints] # shape (7,)
 
         tau_mes = joint_info["tau_est"][0:n_joints] # shape (7,)
@@ -236,12 +255,12 @@ if __name__ == "__main__":
 
         theta_2d = np.arctan2(R_EE[1,0], R_EE[0,0])
 
-        mj_env.add_visual_ellipsoid(eraser_bb_size_3d, P_EE, R_EE, np.array([1,0,0,0.1]), id_geom_offset=eraser_bb_id_offset)
+        mj_env.add_visual_ellipsoid(eraser_bb_size_3d, P_EE, R_EE, np.array([1,0,0,0]), id_geom_offset=eraser_bb_id_offset)
 
         R_2d_to_3d = np.array([[np.cos(theta_2d), -np.sin(theta_2d), 0],
                             [np.sin(theta_2d), np.cos(theta_2d), 0],
                             [0, 0, 1]], dtype=config.np_dtype)
-        mj_env.add_visual_ellipsoid(eraser_bb_size_3d, pin_info["P_EE"], R_2d_to_3d, np.array([0,1,0,1]), id_geom_offset=eraser_bb_id_offset2)
+        mj_env.add_visual_ellipsoid(eraser_bb_size_3d, pin_info["P_EE"], R_2d_to_3d, np.array([0,1,0,0]), id_geom_offset=eraser_bb_id_offset2)
 
         # Visualize the trajectory
         speed = np.linalg.norm((P_EE-P_EE_prev)/dt)
@@ -253,22 +272,20 @@ if __name__ == "__main__":
 
         index = int(np.round(dt*i/Ts))
 
-        if i*dt < circle_start_time:
+        if i*dt < wiping_start_time:
             # Primary obejctive: tracking control
-            K_p_pos = np.diag([40,40,40]).astype(config.np_dtype)
-            K_d_pos = np.diag([30,30,30]).astype(config.np_dtype)
-            e_pos = P_EE - traj[index,:] # shape (3,)
-            e_pos_dt = v_EE[:3] - traj_dt[index,:] # shape (3,)
-            v_dt = traj_dtdt[index,:] - K_p_pos @ e_pos - K_d_pos @ e_pos_dt
+            K_p_pos = np.diag([100,100,100]).astype(config.np_dtype)
+            K_d_pos = np.diag([50,50,50]).astype(config.np_dtype)
+            e_pos = P_EE - traj_pos[index,:] # shape (3,)
+            e_pos_dt = v_EE[:3] - traj_pos_dt[index,:] # shape (3,)
+            v_dt = traj_pos_dtdt[index,:] - K_p_pos @ e_pos - K_d_pos @ e_pos_dt
 
-            R_d = np.array([[1, 0, 0],
-                            [0, -1, 0],
-                            [0, 0, -1]], dtype=config.np_dtype)
-            K_p_rot = np.diag([40,40,40]).astype(config.np_dtype)
-            K_d_rot = np.diag([30,30,30]).astype(config.np_dtype)
+            R_d = traj_rot[index,:]
+            K_p_rot = np.diag([200,200,200]).astype(config.np_dtype)
+            K_d_rot = np.diag([100,100,100]).astype(config.np_dtype)
             e_rot = SO3(R_EE @ R_d.T).log() # shape (3,)
-            e_rot_dt = v_EE[3:] # shape (3,)
-            omega_dt = -K_p_rot @ e_rot - K_d_rot @ e_rot_dt
+            e_rot_dt = v_EE[3:] - traj_rot_dt[index,:] # shape (3,)
+            omega_dt = traj_rot_dtdt[index,:] - K_p_rot @ e_rot - K_d_rot @ e_rot_dt
 
             v_EE_dt_desired = np.concatenate([v_dt, omega_dt])
             S = J_EE
@@ -288,19 +305,19 @@ if __name__ == "__main__":
             # Map to torques
             u = nle + M @ q_dtdt
 
-        if i*dt >= circle_start_time:
+        if i*dt >= wiping_start_time:
             # Primary obejctive: tracking control
-            K_p_pos = np.diag([40,40,40]).astype(config.np_dtype)
-            K_d_pos = np.diag([30,30,30]).astype(config.np_dtype)
-            e_pos = P_EE - traj[index,:] # shape (3,)
-            e_pos_dt = v_EE[:3] - traj_dt[index,:] # shape (3,)
-            v_dt = traj_dtdt[index,:] - K_p_pos @ e_pos - K_d_pos @ e_pos_dt
+            K_p_pos = np.diag([20,20,50]).astype(config.np_dtype)
+            K_d_pos = np.diag([10,10,25]).astype(config.np_dtype)
+            e_pos = P_EE - traj_pos[index,:] # shape (3,)
+            e_pos_dt = v_EE[:3] - traj_pos_dt[index,:] # shape (3,)
+            v_dt = traj_pos_dtdt[index,:] - K_p_pos @ e_pos - K_d_pos @ e_pos_dt
 
-            R_d = np.array([[1, 0, 0],
-                            [0, -1, 0],
+            R_d = np.array([[0, 1, 0],
+                            [1, 0, 0],
                             [0, 0, -1]], dtype=config.np_dtype)
-            K_p_rot = np.diag([80,80,20]).astype(config.np_dtype)
-            K_d_rot = np.diag([30,30,20]).astype(config.np_dtype)
+            K_p_rot = np.diag([200,200,50]).astype(config.np_dtype)
+            K_d_rot = np.diag([100,100,25]).astype(config.np_dtype)
             e_rot = SO3(R_EE @ R_d.T).log() # shape (3,)
             e_rot_dt = v_EE[3:] # shape (3,)
             omega_dt = -K_p_rot @ e_rot - K_d_rot @ e_rot_dt
@@ -432,7 +449,7 @@ if __name__ == "__main__":
         joint_angles[i,:] = q
         finger_positions[i,:] = finger_info["q"]
         controls[i,:] = u
-        if i*dt >= circle_start_time:
+        if i*dt >= wiping_start_time:
             desired_controls[i,:] = q_dtdt_desired
             safe_controls[i,:] = q_dtdt_task
             cbf_values[i,:] = CBF_tmp
