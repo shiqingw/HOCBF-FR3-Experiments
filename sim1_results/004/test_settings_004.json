@@ -63,7 +63,7 @@
         "alpha0": [1.4],
         "gamma1": [3.0],
         "gamma2": [3.0],
-        "compensation": [0]
+        "compensation": [1]
     },
 
     "controller_config":{
