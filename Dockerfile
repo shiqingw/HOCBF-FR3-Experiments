@@ -37,9 +37,17 @@ ENV PATH /opt/conda/bin:$PATH
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
     build-essential cmake g++ git wget libatomic1 gfortran perl m4 pkg-config \
-    liblapack-dev libopenblas-dev libgl1-mesa-glx libpoco-dev libeigen3-dev \
+    liblapack-dev libopenblas-dev libopenblas-base libgl1-mesa-glx libpoco-dev libeigen3-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# latex packages
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends texlive-full cm-super\
+    && texhash \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 
 # Update Python in the base environment to 3.11
 RUN conda install python==3.11 \
@@ -47,11 +55,15 @@ RUN conda install python==3.11 \
 
 # Install the required Python packages
 RUN pip install numpy==1.24.4 \
-    scipy==1.10.1 \
+    scipy==1.11.4 \
     matplotlib==3.7.2 \
     proxsuite \
     pin==2.6.18 \
     mujoco \
+    cvxpy \
+    sympy \
+    posix_ipc \
+    ipykernel \
     && rm -rf ~/.cache/pip
 
 # Install pybind11, xtensor, xtensor-blas
@@ -59,7 +71,6 @@ RUN conda install -c conda-forge \
     pybind11 \
     xtensor \
     xtensor-blas \
-    # xtensor-python \ 
     && conda clean -afy
 
 # Install xtensor-python from source
@@ -72,10 +83,42 @@ RUN git clone https://github.com/shiqingw/xtensor-python.git \
     && cd ../.. \
     && rm -rf xtensor-python
 
-# Install Differentiable-Optimization-Helper
-RUN git clone https://github.com/shiqingw/Differentiable-Optimization-Helper.git\
-    && cd Differentiable-Optimization-Helper \
-    && pip install -e .
+RUN conda install -c conda-forge \
+    xsimd \
+    xtl \
+    && conda clean -afy
+
+RUN git clone https://github.com/cvxgrp/scs.git \
+    && cd scs \
+    && mkdir build \
+    && cd build \
+    && cmake -DCMAKE_INSTALL_PREFIX='/usr/local' .. \
+    && make \
+    && make install \
+    && cd ..
+
+# Install Scaling-Functions-Helper
+RUN git clone https://github.com/shiqingw/Scaling-Functions-Helper.git\
+    && cd Scaling-Functions-Helper \
+    && mkdir build \
+    && cd build \
+    && cmake -DCMAKE_INSTALL_PREFIX='/usr/local' .. \
+    && make install \
+    && cd .. \ 
+    && pip install -e . \
+    && cd ..
+
+# Install 
+RUN git clone https://github.com/shiqingw/HOCBF-Helper.git\
+    && cd HOCBF-Helper \
+    && pip install -e . \
+    && cd ..
+
+# Install liegroups
+RUN git clone https://github.com/utiasSTARS/liegroups.git \
+    && cd liegroups \
+    && pip install -e . \
+    && cd ..
 
 # Install FR3Py
 RUN git clone https://github.com/Rooholla-KhorramBakht/FR3Py.git \
@@ -123,11 +166,6 @@ RUN cd FR3Py/fr3_bridge \
     && make install \
     && cd ../.. 
 
-# Install liegroups
-RUN git clone https://github.com/utiasSTARS/liegroups.git \
-    && cd liegroups \
-    && pip install -e . \
-    && cd ..
 
 # # Setting up the real-time kernel
 # RUN apt-get update \

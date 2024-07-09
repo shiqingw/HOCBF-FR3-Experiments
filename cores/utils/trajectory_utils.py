@@ -40,6 +40,8 @@ class PositionTrapezoidalTrajectory:
             start_index = int(np.round((start_time-target_time[0]) / Ts))
             finish_index = int(np.round((finish_time-target_time[0]) / Ts))
             distance = self.distances[i]
+            if distance < 1e-6:
+                continue
             diff_vector = self.diff_vectors[i, :]
             for j in range(start_index, finish_index + 1):
                 current_t = self.t[j]
@@ -65,6 +67,9 @@ class PositionTrapezoidalTrajectory:
             s_dot: Velocity at time t.
             s_dot_dot: Acceleration at time t.
         """
+
+        if distance < 1e-6:
+            return 0, 0, 0
 
         qc_dot_dot = 0.1
         while qc_dot_dot < 4 * distance / duration**2:
@@ -284,8 +289,7 @@ class CircularTrajectory:
         Args:
             center_in_world (np.array): center of the circular trajectory, shape (n,).
             start_point_in_world (np.array): start point of the circular trajectory, shape (n,).
-            target_time (list or np.array): List of target times for each via point, shape (N+1,).
-            linear_velocity (float): linear velocity on the circular trajectory.
+            nominal_linear_velocity (float): linear velocity on the circular trajectory.
             R_b_to_w (np.array): rotation matrix from body frame to world frame, shape (n, n).
             start_time (float): start time.
             end_time (float): end time.
