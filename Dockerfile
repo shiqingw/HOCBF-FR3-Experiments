@@ -48,6 +48,19 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Display
+RUN apt-get update \
+    && apt-get install -y -qq --no-install-recommends \
+    libglvnd0 \
+    libgl1 \
+    libglx0 \
+    libegl1 \
+    libxext6 \
+    libx11-6 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+ENV NVIDIA_VISIBLE_DEVICES all
+ENV NVIDIA_DRIVER_CAPABILITIES graphics,utility,compute
 
 # Update Python in the base environment to 3.11
 RUN conda install python==3.11 \
@@ -97,33 +110,10 @@ RUN git clone https://github.com/cvxgrp/scs.git \
     && make install \
     && cd ..
 
-# Install Scaling-Functions-Helper
-RUN git clone https://github.com/shiqingw/Scaling-Functions-Helper.git\
-    && cd Scaling-Functions-Helper \
-    && mkdir build \
-    && cd build \
-    && cmake -DCMAKE_INSTALL_PREFIX='/usr/local' .. \
-    && make install \
-    && cd .. \ 
-    && pip install -e . \
-    && cd ..
-
-# Install 
-RUN git clone https://github.com/shiqingw/HOCBF-Helper.git\
-    && cd HOCBF-Helper \
-    && pip install -e . \
-    && cd ..
-
 # Install liegroups
 RUN git clone https://github.com/utiasSTARS/liegroups.git \
     && cd liegroups \
     && pip install -e . \
-    && cd ..
-
-# Install FR3Py
-RUN git clone https://github.com/Rooholla-KhorramBakht/FR3Py.git \
-    && cd FR3Py \
-    && pip install -e .\
     && cd ..
 
 # Install libfranka
@@ -156,6 +146,12 @@ RUN git clone https://github.com/lcm-proj/lcm.git \
     && cd ../.. \
     && rm -rf lcm
 
+# Install FR3Py
+RUN git clone https://github.com/Rooholla-KhorramBakht/FR3Py.git \
+    && cd FR3Py \
+    && pip install -e .\
+    && cd ..
+
 # Install C++ Bridge
 RUN cd FR3Py/fr3_bridge \
     && mkdir build \
@@ -165,6 +161,23 @@ RUN cd FR3Py/fr3_bridge \
     && make \
     && make install \
     && cd ../.. 
+    
+# Install Scaling-Functions-Helper
+RUN git clone https://github.com/shiqingw/Scaling-Functions-Helper.git\
+    && cd Scaling-Functions-Helper \
+    && mkdir build \
+    && cd build \
+    && cmake -DCMAKE_INSTALL_PREFIX='/usr/local' .. \
+    && make install \
+    && cd .. \ 
+    && pip install -e . \
+    && cd ..
+
+# Install HOCBF-Helper
+RUN git clone https://github.com/shiqingw/HOCBF-Helper.git\
+    && cd HOCBF-Helper \
+    && pip install -e . \
+    && cd ..
 
 
 # # Setting up the real-time kernel
@@ -185,21 +198,6 @@ RUN cd FR3Py/fr3_bridge \
 #     && make menuconfig \
 #     && make -j$(nproc) deb-pkg \
 #     && sudo dpkg -i ../linux-headers-*.deb ../linux-image-*.deb 
-
-# Display
-RUN apt-get update \
-    && apt-get install -y -qq --no-install-recommends \
-    libglvnd0 \
-    libgl1 \
-    libglx0 \
-    libegl1 \
-    libxext6 \
-    libx11-6 \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-ENV NVIDIA_VISIBLE_DEVICES all
-ENV NVIDIA_DRIVER_CAPABILITIES graphics,utility,compute
-
 
 # Spin the container
 CMD ["tail", "-f", "/dev/null"]
