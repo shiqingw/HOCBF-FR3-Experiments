@@ -75,7 +75,6 @@ RUN pip install numpy==1.24.4 \
     mujoco \
     cvxpy \
     sympy \
-    proxuite \
     osqp \
     ipykernel \
     && rm -rf ~/.cache/pip
