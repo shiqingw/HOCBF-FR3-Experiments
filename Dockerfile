@@ -67,17 +67,17 @@ RUN conda install python==3.11 \
     && conda clean -afy
 
 # Install the required Python packages
-RUN pip install numpy==1.24.4 \
-    scipy==1.11.4 \
-    matplotlib==3.7.2 \
-    proxsuite \
-    pin==2.6.18 \
-    mujoco \
-    cvxpy \
-    sympy \
-    osqp \
-    ipykernel \
-    && rm -rf ~/.cache/pip
+RUN pip install numpy==1.24.4
+RUN pip install scipy==1.11.4
+RUN pip install matplotlib==3.7.2
+RUN pip install proxsuite
+RUN pip install pin==2.6.18
+RUN pip install mujoco
+RUN pip install cvxpy
+RUN pip install sympy
+RUN pip install osqp
+RUN pip install ipykernel
+RUN rm -rf ~/.cache/pip
 
 # Install pybind11, xtensor, xtensor-blas
 RUN conda install -c conda-forge \
