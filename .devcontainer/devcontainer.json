@@ -1,5 +1,5 @@
 {
-	"name": "docker-fr3",
+	"name": "docker-fr3-experiments",
 	"build": {
         "context": "..",
         "dockerfile": "../Dockerfile"
