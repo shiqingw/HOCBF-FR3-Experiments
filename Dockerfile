@@ -160,12 +160,18 @@ RUN cd lcm/lcm-python \
     && cd ../.. \
     && rm -rf lcm
 
+
 # Install FR3Py
-RUN git clone https://github.com/Rooholla-KhorramBakht/FR3Py.git \
+RUN git clone --recursive https://github.com/Rooholla-KhorramBakht/FR3Py.git \
     && cd FR3Py \
     && pip install -e .\
     && cd ..
 
+# Install FR3Py-Gripper
+RUN cd FR3Py/fr3_gripper \
+    && pip install . \
+    && cd ../..
+    
 # Install C++ Bridge
 RUN cd FR3Py/fr3_bridge \
     && mkdir build \
