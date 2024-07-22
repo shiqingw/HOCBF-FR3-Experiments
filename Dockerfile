@@ -219,5 +219,9 @@ RUN git clone https://github.com/shiqingw/HOCBF-Helper.git\
 #     && make -j$(nproc) deb-pkg \
 #     && sudo dpkg -i ../linux-headers-*.deb ../linux-image-*.deb 
 
+# Time zone
+# ENV TZ=America/New_York
+# RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
 # Spin the container
 CMD ["tail", "-f", "/dev/null"]
