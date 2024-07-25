@@ -27,10 +27,16 @@ class PolytopeCollection:
 
         for (i, key) in enumerate(obs_dict.keys()):
             obs = obs_dict[key]
-            pos = np.array(obs["pos"])
-            quat = np.array(obs["quat"])
-            vertices = np.array(obs["vertices"])
-            all_vertices_in_world = self.convert_vertices_to_world_3d(vertices, pos, quat) # shape (n_vertices, dim)
+            if dim == 3:
+                pos = np.array(obs["pos"])
+                quat = np.array(obs["quat"])
+                vertices = np.array(obs["vertices"])
+                all_vertices_in_world = self.convert_vertices_to_world_3d(vertices, pos, quat) # shape (n_vertices, dim)
+            elif dim == 2:
+                pos = np.array(obs["pos"])
+                theta = obs["theta"]
+                vertices = np.array(obs["vertices"])
+                all_vertices_in_world = self.convert_vertices_to_world_2d(vertices, pos, theta) # shape (n_vertices, dim)
             A, b = self.get_facial_equations(all_vertices_in_world)
             polytope = {}
             polytope["A"] = A
@@ -42,6 +48,11 @@ class PolytopeCollection:
     def convert_vertices_to_world_3d(self, vertices, pos, quat):
         quat = quat / np.linalg.norm(quat)
         R = Rotation.from_quat(quat).as_matrix()
+        points = vertices @ R.T + pos
+        return points
+    
+    def convert_vertices_to_world_2d(self, vertices, pos, theta):
+        R = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
         points = vertices @ R.T + pos
         return points
 
