@@ -1,5 +1,8 @@
 import numpy as np
 import pickle
+from scipy.spatial import ConvexHull
+from scipy.spatial.distance import pdist, squareform
+from scipy.cluster.hierarchy import linkage, fcluster
 
 def seed_everything(seed: int = 0):
     np.random.seed(seed)
@@ -88,3 +91,52 @@ def get_orthogonal_vector(v, u):
     if np.linalg.norm(w) != 0:
         w = w / np.linalg.norm(w)
     return w
+
+def unique_rows_with_tolerance(arr, tol):
+    # Compute the pairwise distances between rows
+    pairwise_dist = pdist(arr)
+    # Convert the pairwise distances to a square form distance matrix
+    dist_matrix = squareform(pairwise_dist)
+    # Perform hierarchical clustering
+    Z = linkage(dist_matrix, method='single')
+    # Form flat clusters based on the given tolerance
+    cluster_labels = fcluster(Z, tol, criterion='distance')
+    # Find the unique clusters and their representative rows
+    unique_clusters = np.unique(cluster_labels)
+    unique_rows = np.array([arr[cluster_labels == cluster][0] for cluster in unique_clusters])
+    
+    return unique_rows
+
+def get_facial_equations(vertices):
+    """
+    vertices: np.array of shape (n_vertices, dim)
+    
+    Returns:
+    The matrices A and b such that A * x + b <= 0 defines the polytope
+    """
+    hull = ConvexHull(vertices)
+    dim = vertices.shape[1]
+    tmp = np.zeros((len(hull.simplices), dim+1))
+
+    for (i, simplex) in enumerate(hull.simplices):
+        facial_vertices = vertices[simplex]
+        homogeneous_coordinates = np.c_[facial_vertices, np.ones(facial_vertices.shape[0])]
+        coeffs = np.linalg.svd(homogeneous_coordinates)[-1][-1, :]
+        coeffs[np.abs(coeffs) < 1e-6] = 0
+        tmp[i] = coeffs
+    
+    # Adjust the signs of the equations
+    mean_point = np.mean(vertices, axis=0)
+    for i in range(len(tmp)):
+        if np.dot(tmp[i,0:dim], mean_point) + tmp[i,dim] > 0:
+            tmp[i] = -tmp[i]
+
+    # normalize to have a unit norm
+    norm = np.linalg.norm(tmp[:,0:dim], axis=1)
+    tmp = tmp / norm[:, np.newaxis]
+    
+    tmp = unique_rows_with_tolerance(tmp, 1e-5)
+    A = tmp[:,0:dim]
+    b = tmp[:,dim]
+
+    return A, b

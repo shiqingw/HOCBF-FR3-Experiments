@@ -1,8 +1,11 @@
 {
-	"name": "docker-fr3-experiments",
+	"name": "docker-fr3-exp",
 	"build": {
         "context": "..",
-        "dockerfile": "../Dockerfile"
+        "dockerfile": "../Dockerfile",
+		"args": {
+            "NO_CACHE": "1"
+        }
     },
 	"containerEnv": {
         "DISPLAY": "unix:0",

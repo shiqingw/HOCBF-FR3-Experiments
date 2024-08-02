@@ -192,7 +192,7 @@ RUN git clone https://github.com/shiqingw/Scaling-Functions-Helper.git\
     && cd .. \
     && pip install -e . \
     && cd ..
-
+    
 # Install HOCBF-Helper
 RUN git clone https://github.com/shiqingw/HOCBF-Helper.git\
     && cd HOCBF-Helper \
