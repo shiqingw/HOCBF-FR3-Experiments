@@ -45,7 +45,7 @@
 				"github.copilot",
 				"llvm-vs-code-extensions.vscode-clangd",
 				"ms-azuretools.vscode-docker",
-				// "ms-iot.vscode-ros",
+				"ms-iot.vscode-ros",
 				"ms-python.black-formatter",
 				"ms-python.debugpy",
 				// "ms-python.flake8",
