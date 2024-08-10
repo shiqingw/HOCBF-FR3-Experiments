@@ -210,6 +210,16 @@ RUN git clone https://github.com/shiqingw/HOCBF-Helper.git\
     && pip install -e . \
     && cd ..
 
+# Install vicon_bridge2
+RUN pip install empy==3.3.4 catkin_pkg lark
+RUN mkdir vicon_ros2 \
+    && cd vicon_ros2 \
+    && mkdir src \
+    && cd src \
+    && git clone https://github.com/Rooholla-KhorramBakht/vicon_bridge2.git \
+    && cd .. \
+    && source /opt/ros/humble/setup.sh \
+    && colcon build
 
 # Spin the container
 CMD ["tail", "-f", "/dev/null"]
