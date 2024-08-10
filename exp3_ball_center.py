@@ -28,23 +28,32 @@ if __name__ == '__main__':
     with open('exp3_marker_data.pickle', 'rb') as f:
         data = pickle.load(f)
 
-    timestamps = np.array(data['timestamps'])
+    timestamps = []
+    marker_positions = []
+    for sample in data['dataset']:
+        timestamps.append(sample[0])
+        marker_positions.append(sample[1])
+
+    timestamps = np.array(timestamps)
     timestamps -= timestamps[0]
-    marker_positions = data['positions']
 
     center = np.zeros((len(timestamps), 3))
+    median = np.zeros((len(timestamps), 3))
     for i, positions in enumerate(marker_positions):
         positions = np.array(positions)/1000.0
-        median = np.median(positions, axis=0)
-        positions = np.array([p for p in positions if np.linalg.norm(p - median) < 0.1])
+        median_tmp = np.median(positions, axis=0)
+        median[i] = median_tmp
+        positions = np.array([p for p in positions if np.linalg.norm(p - median_tmp) < 0.1])
         if len(positions) <= 4:
             center[i] = center[i-1]
         else:
             center[i] = find_sphere_center(positions, 0.4225)
-    
-    # plt.plot(timestamps)
+    # plt.plot(timestamps, '.')
     # plt.show()
 
+    # plt.plot(median[:, 0], label='x')
+    # plt.plot(median[:, 1], label='y')
+    # plt.plot(median[:, 2], label='z')
     plt.plot(timestamps, center[:, 0], label='x')
     plt.plot(timestamps, center[:, 1], label='y')
     plt.plot(timestamps, center[:, 2], label='z')

@@ -52,16 +52,14 @@ class ROS2ExecutorManager:
         """Terminate all nodes and shutdown rclpy."""
         for node in self.nodes:
             node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
-        if self.executor_thread and threading.current_thread() != self.executor_thread:
-            self.executor_thread.join()
+        # if rclpy.ok():
+        # rclpy.shutdown()
 
 
 class MarkerSubscriber(Node):
     def __init__(self,
-                 topic='/vicon/markers'
-                 ):
+                 topic='/vicon/markers',
+                 user_callback=None):
         super().__init__('marker_subscriber')
         self.topic = topic
         self.subscription = self.create_subscription(
@@ -71,27 +69,22 @@ class MarkerSubscriber(Node):
             1)
         self.positions = None
         self.timestamp = None
-
-        self.last_time = self.get_clock().now()
-        self.counter = 0
+        self.user_callback = user_callback
+        self.old_stamp = time.time()
 
     def listener_callback(self, msg):
-        
-        self.counter += 1
-        if self.counter % 100 == 0:  # Print every 100 messages
-            current_time = self.get_clock().now()
-            time_diff = (current_time - self.last_time).nanoseconds / 1e9  # Convert nanoseconds to seconds
-            self.last_time = current_time
-            frequency = 100 / time_diff
-            self.get_logger().info(f'Callback frequency: {frequency:.2f} Hz')
-
+    
         # Extract timestamp
         self.timestamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
-        
+        stamp = time.time()
+        print(1/(stamp - self.old_stamp))
+        self.old_stamp = stamp
         # Extract marker positions
-        positions = []
-        for marker in msg.markers:
-            position = [marker.translation.x, marker.translation.y, marker.translation.z]
-            positions.append(position)
-        self.positions = positions
+        # positions = []
+        # for marker in msg.markers:
+        #     position = [marker.translation.x, marker.translation.y, marker.translation.z]
+        #     positions.append(position)
+        # self.positions = positions
+        # if self.user_callback is not None:
+        #     self.user_callback([self.timestamp, self.positions])
 
