@@ -8,8 +8,6 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile
 from rclpy.executors import MultiThreadedExecutor
-from contextlib import contextmanager
-
 from std_msgs.msg import Header
 from vicon_msgs.msg import Markers, Marker
 from geometry_msgs.msg import Point
@@ -47,7 +45,6 @@ class ROS2ExecutorManager:
     def start(self):
         """Start spinning the nodes in a separate thread."""
         self.executor_thread = threading.Thread(target=self._run_executor)
-        self.executor_thread.daemon = True
         self.executor_thread.start()
 
     def terminate(self):
@@ -69,9 +66,8 @@ class MarkerSubscriber(Node):
             self.topic,
             self.listener_callback,
             1)
-        self.positions_np = None
+        self.positions = None
         self.timestamp = None
-        self.center = None
         self.user_callback = user_callback
         self.old_stamp = time.time()
 
@@ -82,35 +78,12 @@ class MarkerSubscriber(Node):
         stamp = time.time()
         print(1/(stamp - self.old_stamp))
         self.old_stamp = stamp
-
         # Extract marker positions
-        positions_all = []
-        for marker in msg.markers:
-            if len(marker.marker_name) > 0 or len(marker.subject_name) > 0 or len(marker.segment_name) > 0:
-                continue
-            position = [marker.translation.x, marker.translation.y, marker.translation.z]
-            positions_all.append(position)
-        positions_all_np = np.array(positions_all)/1000.0
-        median = np.median(positions_all_np, axis=0)
-        positions_np = positions_all_np[np.linalg.norm(positions_all_np - median, axis=1) < 0.1]
-        self.positions_np = positions_np
-        if len(self.positions_np) >= 4:
-            self.center = self.find_sphere_center(self.positions_np, 0.4225)
+        # positions = []
+        # for marker in msg.markers:
+        #     position = [marker.translation.x, marker.translation.y, marker.translation.z]
+        #     positions.append(position)
+        # self.positions = positions
+        # if self.user_callback is not None:
+        #     self.user_callback([self.timestamp, self.positions])
 
-        if self.user_callback is not None:
-            self.user_callback([self.timestamp, self.positions_np, self.center])
-
-    def find_sphere_center(self, points, r):
-        # Choose the first point as the reference
-        x1, y1, z1 = points[0]
-
-        # Compute A matrix using vectorized operations
-        A = points[1:] - points[0]
-
-        # Compute the b vector using vectorized operations
-        b = 0.5 * (np.sum(points[1:]**2, axis=1) - np.sum(points[0]**2))
-
-        # Solve the linear system A * [x_c, y_c, z_c] = b
-        center = np.linalg.lstsq(A, b, rcond=None)[0]
-
-        return center

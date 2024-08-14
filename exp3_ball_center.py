@@ -3,20 +3,14 @@ import pickle
 import matplotlib.pyplot as plt
 
 def find_sphere_center(points, r):
-    N = len(points)
-    A = []
-    b = []
-
-    # Choose the first point as reference
+    # Choose the first point as the reference
     x1, y1, z1 = points[0]
 
-    for i in range(1, N):
-        x, y, z = points[i]
-        A.append([x - x1, y - y1, z - z1])
-        b.append(0.5 * (x**2 + y**2 + z**2 - x1**2 - y1**2 - z1**2))
+    # Compute A matrix using vectorized operations
+    A = points[1:] - points[0]
 
-    A = np.array(A)
-    b = np.array(b)
+    # Compute the b vector using vectorized operations
+    b = 0.5 * (np.sum(points[1:]**2, axis=1) - np.sum(points[0]**2))
 
     # Solve the linear system A * [x_c, y_c, z_c] = b
     center = np.linalg.lstsq(A, b, rcond=None)[0]
@@ -30,17 +24,20 @@ if __name__ == '__main__':
 
     timestamps = []
     marker_positions = []
+    center_online = []
     for sample in data['dataset']:
         timestamps.append(sample[0])
         marker_positions.append(sample[1])
+        center_online.append(sample[2])
 
     timestamps = np.array(timestamps)
     timestamps -= timestamps[0]
 
     center = np.zeros((len(timestamps), 3))
     median = np.zeros((len(timestamps), 3))
+    center_online = np.array(center_online)
     for i, positions in enumerate(marker_positions):
-        positions = np.array(positions)/1000.0
+        positions = np.array(positions)
         median_tmp = np.median(positions, axis=0)
         median[i] = median_tmp
         positions = np.array([p for p in positions if np.linalg.norm(p - median_tmp) < 0.1])
@@ -54,9 +51,12 @@ if __name__ == '__main__':
     # plt.plot(median[:, 0], label='x')
     # plt.plot(median[:, 1], label='y')
     # plt.plot(median[:, 2], label='z')
-    plt.plot(timestamps, center[:, 0], label='x')
-    plt.plot(timestamps, center[:, 1], label='y')
-    plt.plot(timestamps, center[:, 2], label='z')
+    # plt.plot(timestamps, center[:, 0], label='x')
+    # plt.plot(timestamps, center[:, 1], label='y')
+    # plt.plot(timestamps, center[:, 2], label='z')
+    plt.plot(timestamps, center_online[:, 0], label='x')
+    plt.plot(timestamps, center_online[:, 1], label='y')
+    plt.plot(timestamps, center_online[:, 2], label='z')
     plt.legend()
     plt.xlabel('Time [s]')
     plt.ylabel('Position [m]')
