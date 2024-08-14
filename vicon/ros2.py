@@ -73,22 +73,38 @@ class MarkerSubscriber(Node):
             self.listener_callback,
             1)
         
+        self.counter = 0
+        
         self.user_callback = user_callback
         self.positions_np = None
-        self.timestamp = None
-        self.center = None
-        self.consecutive_frames = 4
+        self.msg_timestamp = None
 
+        self.center = None
+        self.center_timestamp = None
+        self.center_timestamp_prev = 0
+
+        self.consecutive_frames = 0
+        self.max_consecutive_frames = 48
+        self.consecutive_centers = np.zeros((self.max_consecutive_frames, 3))
+        self.consecutive_timestamps = np.zeros(self.max_consecutive_frames)
+
+        self.c2 = None
+        self.c1 = None
+        self.c0 = None
+        self.is_flying = False
 
         self.old_stamp = time.time()
 
     def listener_callback(self, msg):
     
         # Extract timestamp
-        self.timestamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        self.msg_timestamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
         stamp = time.time()
-        print(1/(stamp - self.old_stamp))
-        self.old_stamp = stamp
+        self.counter += 1
+        if self.counter % 100 == 0:
+            self.counter = 0
+            print(f"Rate: {100/(stamp-self.old_stamp)}")
+            self.old_stamp = stamp
 
         # Extract marker positions
         positions_all = []
@@ -97,18 +113,46 @@ class MarkerSubscriber(Node):
                 continue
             position = [marker.translation.x, marker.translation.y, marker.translation.z]
             positions_all.append(position)
-        positions_all_np = np.array(positions_all)/1000.0
-        median = np.median(positions_all_np, axis=0)
-        positions_np = positions_all_np[np.linalg.norm(positions_all_np - median, axis=1) < 0.1]
-        self.positions_np = positions_np
+        
+        if len(positions_all) > 0:
+            positions_all_np = np.array(positions_all)/1000.0
+            median = np.median(positions_all_np, axis=0)
+            positions_np = positions_all_np[np.linalg.norm(positions_all_np - median, axis=1) < 0.1] # ball radius 0.04225
+            self.positions_np = positions_np
 
+        # Find the center of the sphere
         if len(self.positions_np) >= 4:
-            self.center = self.find_sphere_center(self.positions_np, 0.4225)
-
+            self.center = self.find_sphere_center(self.positions_np)
+            self.center_timestamp = self.msg_timestamp
+        
+        # Update the consecutive centers
+        if self.center_timestamp != self.center_timestamp_prev:
+            self.consecutive_frames = min(self.consecutive_frames + 1, self.max_consecutive_frames)
+            self.consecutive_centers[:-1] = self.consecutive_centers[1:]
+            self.consecutive_centers[-1,:] = self.center.copy()
+            self.consecutive_timestamps[:-1] = self.consecutive_timestamps[1:]
+            self.consecutive_timestamps[-1] = self.center_timestamp
+            self.center_timestamp_prev = self.center_timestamp
+        
+        # Fit the parabola to the consecutive centers
+        if self.consecutive_frames == self.max_consecutive_frames:
+            tmp_consecutive_timestamps = self.consecutive_timestamps - self.consecutive_timestamps[0]
+            c2, c1, c0 = self.find_coefficients(tmp_consecutive_timestamps, self.consecutive_centers)
+            self.c2 = c2
+            self.c1 = c1
+            self.c0 = c0
+        
+        # Check if the ball is flying
+        if self.c2 is not None and self.c2[-1] < -9.1 and self.c1[-1] > -11.0:
+            self.is_flying = True
+        else:
+            self.is_flying = False
+        
+        # Call the user-defined callback function
         if self.user_callback is not None:
-            self.user_callback([self.timestamp, self.positions_np, self.center])
+            self.user_callback([self.msg_timestamp, self.center_timestamp, self.positions_np, self.center, self.c2, self.c1, self.c0, self.is_flying])
 
-    def find_sphere_center(self, points, r):
+    def find_sphere_center(self, points):
         """
         Finds the center of a sphere given a set of non-coplanar points on its surface.
 
@@ -134,9 +178,6 @@ class MarkerSubscriber(Node):
 
         if len(points) < 4:
             raise ValueError("At least 4 points are required to find the sphere center.")
-        
-        # Choose the first point as the reference
-        x1, y1, z1 = points[0]
 
         # Compute A matrix using vectorized operations
         A = points[1:] - points[0]

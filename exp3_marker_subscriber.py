@@ -18,11 +18,12 @@ if __name__ == '__main__':
 
     try:
         # Let the nodes run for 10 seconds
-        time.sleep(10)
+        time.sleep(60)
     finally:
+        with open('exp3_marker_data.pickle', 'wb') as f:
+            pickle.dump({'dataset':dataset}, f)
+            print("data saved")
         # Terminate the executor and shutdown nodes
         ros2_exec_manager.terminate()
 
-    with open('exp3_marker_data.pickle', 'wb') as f:
-        pickle.dump({'dataset':dataset}, f)
         
