@@ -18,7 +18,7 @@ if __name__ == '__main__':
 
     try:
         # Let the nodes run for 10 seconds
-        time.sleep(60)
+        time.sleep(30)
     finally:
         with open('exp3_marker_data.pickle', 'wb') as f:
             pickle.dump({'dataset':dataset}, f)

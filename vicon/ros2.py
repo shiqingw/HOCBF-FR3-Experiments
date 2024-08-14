@@ -88,10 +88,15 @@ class MarkerSubscriber(Node):
         self.consecutive_centers = np.zeros((self.max_consecutive_frames, 3))
         self.consecutive_timestamps = np.zeros(self.max_consecutive_frames)
 
+        self.coefficients = None
         self.c2 = None
         self.c1 = None
         self.c0 = None
         self.is_flying = False
+
+        self.future_time = np.array([0.0, 0.05, 0.1, 0.15, 0.2])
+        self.future_pos = None
+        self.future_vel = None
 
         self.old_stamp = time.time()
 
@@ -137,20 +142,27 @@ class MarkerSubscriber(Node):
         # Fit the parabola to the consecutive centers
         if self.consecutive_frames == self.max_consecutive_frames:
             tmp_consecutive_timestamps = self.consecutive_timestamps - self.consecutive_timestamps[0]
-            c2, c1, c0 = self.find_coefficients(tmp_consecutive_timestamps, self.consecutive_centers)
-            self.c2 = c2
-            self.c1 = c1
-            self.c0 = c0
+            self.coefficients = self.find_coefficients(tmp_consecutive_timestamps, self.consecutive_centers)
+            self.c2, self.c1, self.c0 = self.coefficients
         
         # Check if the ball is flying
         if self.c2 is not None and self.c2[-1] < -9.1 and self.c1[-1] > -11.0:
             self.is_flying = True
         else:
             self.is_flying = False
+
+        # Predict the future position and velocity
+        if self.coefficients is not None:
+            future_time_tmp = self.future_time + self.consecutive_timestamps[-1] - self.consecutive_timestamps[0]
+            A_pos = np.vstack([0.5 * future_time_tmp**2, future_time_tmp, np.ones_like(future_time_tmp)]).T
+            self.future_pos = A_pos @ self.coefficients
+            A_vel = np.vstack([future_time_tmp, np.ones_like(future_time_tmp), np.zeros_like(future_time_tmp)]).T
+            self.future_vel = A_vel @ self.coefficients
         
         # Call the user-defined callback function
         if self.user_callback is not None:
-            self.user_callback([self.msg_timestamp, self.center_timestamp, self.positions_np, self.center, self.c2, self.c1, self.c0, self.is_flying])
+            self.user_callback([self.msg_timestamp, self.center_timestamp, self.positions_np, self.center, \
+                                self.c2, self.c1, self.c0, self.is_flying, self.future_pos, self.future_vel])
 
     def find_sphere_center(self, points):
         """
