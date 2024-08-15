@@ -12,7 +12,6 @@ if __name__ == '__main__':
     ros2_exec_manager = ROS2ExecutorManager()
     marker_subscriber = MarkerSubscriber(user_callback=store_sample)
 
-    ros2_exec_manager = ROS2ExecutorManager()
     ros2_exec_manager.add_node(marker_subscriber)
     ros2_exec_manager.start()
 
