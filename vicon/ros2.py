@@ -14,6 +14,7 @@ from std_msgs.msg import Header
 from vicon_msgs.msg import Markers, Marker
 from geometry_msgs.msg import Point
 
+from .kalman_filter_for_ball import KalmanFilter
 
 def ros2_init(args=None):
     rclpy.init(args=args)
@@ -64,7 +65,8 @@ class ROS2ExecutorManager:
 class MarkerSubscriber(Node):
     def __init__(self,
                  topic='/vicon/markers',
-                 user_callback=None):
+                 user_callback=None,
+                 fit_with_kf=False):
         super().__init__('marker_subscriber')
         self.topic = topic
         self.subscription = self.create_subscription(
@@ -100,6 +102,20 @@ class MarkerSubscriber(Node):
 
         self.old_stamp = time.time()
 
+        # Initialize the Kalman filter
+        dt = 1.0/240
+        Q_entries = np.array([0.001, 0.001, 0.001, 10.0, 10.0, 10.0])
+        Q = np.diag(Q_entries**2)
+        R_entries = np.array([0.05, 0.05, 0.05])
+        R = np.diag(R_entries**2)
+        x0 = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        P0_entries = np.array([1.0, 1.0, 1.0, 0.001, 0.001, 0.001])
+        P0 = np.diag(P0_entries**2)
+        self.kalman_filter = KalmanFilter(dt, Q, R, x0, P0)
+        self.kf_center = None
+        self.kf_velocity = None
+        self.fit_with_kf = fit_with_kf
+
     def listener_callback(self, msg):
     
         # Extract timestamp
@@ -119,10 +135,10 @@ class MarkerSubscriber(Node):
             position = [marker.translation.x, marker.translation.y, marker.translation.z]
             positions_all.append(position)
         
-        if len(positions_all) > 0:
+        if len(positions_all) >= 4:
             positions_all_np = np.array(positions_all)/1000.0
             median = np.median(positions_all_np, axis=0)
-            positions_np = positions_all_np[np.linalg.norm(positions_all_np - median, axis=1) < 0.1] # ball radius 0.04225
+            positions_np = positions_all_np[np.linalg.norm(positions_all_np - median, axis=1) < 0.06] # ball radius 0.04225
             self.positions_np = positions_np
 
         # Find the center of the sphere
@@ -130,14 +146,29 @@ class MarkerSubscriber(Node):
             self.center = self.find_sphere_center(self.positions_np)
             self.center_timestamp = self.msg_timestamp
         
+        # Kalman filter updates
+        self.kalman_filter.predict()
+        if self.center is not None:
+            self.kalman_filter.update(self.center)
+            self.kf_center = self.kalman_filter.get_state()[:3]
+            self.kf_velocity = self.kalman_filter.get_state()[3:6]
+        
         # Update the consecutive centers
         if self.center_timestamp != self.center_timestamp_prev:
-            self.consecutive_frames = min(self.consecutive_frames + 1, self.max_consecutive_frames)
-            self.consecutive_centers[:-1] = self.consecutive_centers[1:]
-            self.consecutive_centers[-1,:] = self.center.copy()
-            self.consecutive_timestamps[:-1] = self.consecutive_timestamps[1:]
-            self.consecutive_timestamps[-1] = self.center_timestamp
-            self.center_timestamp_prev = self.center_timestamp
+            if not self.fit_with_kf:
+                self.consecutive_frames = min(self.consecutive_frames + 1, self.max_consecutive_frames)
+                self.consecutive_centers[:-1] = self.consecutive_centers[1:]
+                self.consecutive_centers[-1,:] = self.center.copy()
+                self.consecutive_timestamps[:-1] = self.consecutive_timestamps[1:]
+                self.consecutive_timestamps[-1] = self.center_timestamp
+                self.center_timestamp_prev = self.center_timestamp
+            else:
+                self.consecutive_frames = min(self.consecutive_frames + 1, self.max_consecutive_frames)
+                self.consecutive_centers[:-1] = self.consecutive_centers[1:]
+                self.consecutive_centers[-1,:] = self.kf_center.copy()
+                self.consecutive_timestamps[:-1] = self.consecutive_timestamps[1:]
+                self.consecutive_timestamps[-1] = self.center_timestamp
+                self.center_timestamp_prev = self.center_timestamp
         
         # Fit the parabola to the consecutive centers
         if self.consecutive_frames == self.max_consecutive_frames:
@@ -146,7 +177,7 @@ class MarkerSubscriber(Node):
             self.c2, self.c1, self.c0 = self.coefficients
         
         # Check if the ball is flying
-        if self.c2 is not None and self.c2[-1] < -9.1 and self.c1[-1] > -11.0:
+        if self.c2 is not None and self.c2[-1] < -9.0 and self.c1[-1] > -10.6:
             self.is_flying = True
         else:
             self.is_flying = False
@@ -162,7 +193,8 @@ class MarkerSubscriber(Node):
         # Call the user-defined callback function
         if self.user_callback is not None:
             self.user_callback([self.msg_timestamp, self.center_timestamp, self.positions_np, self.center, \
-                                self.c2, self.c1, self.c0, self.is_flying, self.future_pos, self.future_vel])
+                                self.c2, self.c1, self.c0, self.is_flying, self.future_pos, self.future_vel,
+                                self.kf_center, self.kf_velocity])
 
     def find_sphere_center(self, points):
         """

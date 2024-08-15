@@ -10,7 +10,7 @@ if __name__ == '__main__':
     ros2_init()
 
     ros2_exec_manager = ROS2ExecutorManager()
-    marker_subscriber = MarkerSubscriber(user_callback=store_sample)
+    marker_subscriber = MarkerSubscriber(user_callback=store_sample, fit_with_kf=True)
 
     ros2_exec_manager.add_node(marker_subscriber)
     ros2_exec_manager.start()
@@ -22,6 +22,7 @@ if __name__ == '__main__':
         with open('exp3_marker_data.pickle', 'wb') as f:
             pickle.dump({'dataset':dataset}, f)
             print("data saved")
+
         # Terminate the executor and shutdown nodes
         ros2_exec_manager.terminate()
 
