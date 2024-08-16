@@ -142,7 +142,7 @@ class MarkerSubscriber(Node):
             self.positions_np = positions_np
 
         # Find the center of the sphere
-        if len(self.positions_np) >= 4:
+        if self.positions_np is not None and len(self.positions_np) >= 4:
             self.center = self.find_sphere_center(self.positions_np)
             self.center_timestamp = self.msg_timestamp
         
@@ -154,7 +154,7 @@ class MarkerSubscriber(Node):
             self.kf_velocity = self.kalman_filter.get_state()[3:6]
         
         # Update the consecutive centers
-        if self.center_timestamp != self.center_timestamp_prev:
+        if self.center is not None and self.center_timestamp != self.center_timestamp_prev:
             if not self.fit_with_kf:
                 self.consecutive_frames = min(self.consecutive_frames + 1, self.max_consecutive_frames)
                 self.consecutive_centers[:-1] = self.consecutive_centers[1:]
