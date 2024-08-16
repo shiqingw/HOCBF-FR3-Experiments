@@ -108,7 +108,7 @@ if __name__ == '__main__':
 
     
     # Control parameters
-    q_d = np.array([0.0, -0.1, 0.0, -1.7, 0.0, 1.57, 0.785])
+    q_d = np.array([0.0, -0.1, 0.0, -1.7, 0.0, 1.67, 0.785])
     Kp_joint = sparse.csc_matrix(np.diag([50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 80.0]))
     Kd_joint = sparse.csc_matrix(np.diag([25.0, 25.0, 25.0, 25.0, 25.0, 25.0, 40.0]))
 
@@ -119,9 +119,10 @@ if __name__ == '__main__':
     print("==> Start control loop")
     q_list = []
     dq_list = []
-    # ddq_list = []
     tau_list = []
     all_h_list = []
+    ball_center_list = []
+    ball_vel_list = []
     time_per_loop_list = []
 
     try:
@@ -241,9 +242,10 @@ if __name__ == '__main__':
             # Collect data
             q_list.append(q.copy())
             dq_list.append(dq.copy())
-            # ddq_list.append(ddq.copy())
             tau_list.append(tau.copy())
             all_h_list.append(all_h_np.copy())
+            ball_center_list.append(ball_pos_in_base.copy())
+            ball_vel_list.append(ball_vel_in_base.copy())
             time_per_loop_list.append(time_loop_end - time_loop_start)
     finally:
         robot.setCommands(np.zeros_like(tau))
@@ -256,7 +258,7 @@ if __name__ == '__main__':
 
         # Create the directory if it doesn't exist
         if not os.path.exists(directory):
-            os.makedirs(directory)
+            os.makedirs(directory)            # "ddq": ddq_list,
 
         # Define the file path
         file_path = os.path.join(directory, "data.pickle")
@@ -265,9 +267,10 @@ if __name__ == '__main__':
         data = {
             "q": q_list,
             "dq": dq_list,
-            # "ddq": ddq_list,
             "tau": tau_list,
             "all_h": all_h_list,
+            "ball_center": ball_center_list,
+            "ball_vel": ball_vel_list,
             "time_per_loop": time_per_loop_list
         }
 
