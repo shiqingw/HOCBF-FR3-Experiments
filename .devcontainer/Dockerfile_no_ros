@@ -1,10 +1,10 @@
-ARG UBUNTU_VER=22.04
+ARG UBUNTU_VER=20.04
 ARG CONDA_VER=latest
 ARG OS_TYPE=x86_64
 # ARG OS_TYPE=aarch64
 
-# FROM ubuntu:${UBUNTU_VER}
-FROM ros:humble
+FROM ubuntu:${UBUNTU_VER}
+# FROM ros:humble
 
 # Set environment variables to non-interactive (this prevents some prompts)
 ENV DEBIAN_FRONTEND=non-interactive
@@ -21,7 +21,7 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# System packages 
+# Run package updates, install packages, and then clean up to reduce layer size
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
     build-essential cmake g++ git wget libatomic1 gfortran perl m4 pkg-config \
@@ -78,24 +78,14 @@ RUN wget http://repo.continuum.io/miniconda/Miniconda3-${CONDA_VER}-Linux-${OS_T
 ENV PATH /opt/conda/bin:$PATH
 SHELL ["/bin/bash", "--login", "-c"]
 
-# For conda-libmamba-solver 
-RUN apt-get update \
-    && apt-get install -y -qq --no-install-recommends \
-    libarchive-dev \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# Update Python in the base environment to 3.10.12
-RUN conda install python==3.10.12 \
+# Update Python in the base environment to 3.11
+RUN conda install python==3.11 \
     && conda clean -afy
 
-RUN conda install -c conda-forge libstdcxx-ng \
-    && conda clean -afy
-    
 # Install libboost
 RUN conda install -c conda-forge libboost \
     && conda clean -afy
-
+    
 # Install the required Python packages
 RUN pip install numpy==1.24.4
 RUN pip install scipy==1.11.4
@@ -103,20 +93,17 @@ RUN pip install matplotlib
 RUN pip install proxsuite
 RUN pip install pin
 RUN pip install mujoco
+RUN pip install cvxpy
 RUN pip install sympy
 RUN pip install osqp
 RUN pip install ipykernel
 RUN rm -rf ~/.cache/pip
-RUN pip install empy==3.3.4 \ 
-    catkin_pkg \ 
-    lark \
-    && rm -rf ~/.cache/pip
 
 # Install pybind11, xtensor, xtensor-blas
-RUN conda install --solver=classic conda-forge::conda-libmamba-solver conda-forge::libmamba conda-forge::libmambapy conda-forge::libarchive
 RUN conda install -c conda-forge pybind11
 RUN conda install -c conda-forge xtensor
 RUN conda install -c conda-forge xtensor-blas
+RUN conda clean -afy
 
 # Install xtensor-python from source
 RUN git clone https://github.com/shiqingw/xtensor-python.git \
@@ -128,10 +115,10 @@ RUN git clone https://github.com/shiqingw/xtensor-python.git \
     && cd ../.. \
     && rm -rf xtensor-python
 
-# Install these two after xtensor-python
-RUN conda install -c conda-forge xsimd
-RUN conda install -c conda-forge xtl
-RUN conda clean -afy
+RUN conda install -c conda-forge \
+    xsimd \
+    xtl \
+    && conda clean -afy
 
 RUN git clone https://github.com/cvxgrp/scs.git \
     && cd scs \
@@ -159,10 +146,9 @@ RUN git clone --recursive https://github.com/frankaemika/libfranka --branch 0.13
     && dpkg -i libfranka*.deb \
     && cd ../.. 
 
-# Install LCM (checkout at an older version)
+# Install LCM
 RUN git clone https://github.com/lcm-proj/lcm.git \
     && cd lcm \
-    && git checkout 6f2f4c948667452aea021c0afefbd512f91283bc \
     && mkdir build \
     && cd build \
     && cmake .. \
@@ -173,6 +159,7 @@ RUN cd lcm/lcm-python \
     && pip install .\
     && cd ../.. \
     && rm -rf lcm
+
 
 # Install FR3Py
 RUN git clone --recursive https://github.com/Rooholla-KhorramBakht/FR3Py.git \
@@ -194,16 +181,6 @@ RUN cd FR3Py/fr3_bridge \
     && make \
     && make install \
     && cd ../.. 
-
-# Install vicon_bridge2
-RUN mkdir vicon_ros2 \
-    && cd vicon_ros2 \
-    && mkdir src \
-    && cd src \
-    && git clone https://github.com/Rooholla-KhorramBakht/vicon_bridge2.git \
-    && cd .. \
-    && source /opt/ros/humble/setup.sh \
-    && colcon build
     
 # Install Scaling-Functions-Helper
 RUN git clone https://github.com/shiqingw/Scaling-Functions-Helper.git\
@@ -222,10 +199,29 @@ RUN git clone https://github.com/shiqingw/HOCBF-Helper.git\
     && pip install -e . \
     && cd ..
 
-# Install FR3-Vicon-Visualizer
-RUN git clone https://github.com/shiqingw/FR3-Vicon-Visualizer.git \
-    && cd FR3-Vicon-Visualizer \
-    && pip install -e .
+
+# # Setting up the real-time kernel
+# RUN apt-get update \
+#     && apt-get install -y --no-install-recommends \
+#     build-essential bc curl ca-certificates gnupg2 libssl-dev lsb-release libelf-dev bison flex dwarves zstd libncurses-dev \
+#     && apt-get clean \
+#     && rm -rf /var/lib/apt/lists/*
+# RUN curl -SLO https://www.kernel.org/pub/linux/kernel/v5.x/linux-5.9.1.tar.xz \
+#     && curl -SLO https://www.kernel.org/pub/linux/kernel/v5.x/linux-5.9.1.tar.sign \
+#     && curl -SLO https://www.kernel.org/pub/linux/kernel/projects/rt/5.9/patch-5.9.1-rt20.patch.xz \
+#     && curl -SLO https://www.kernel.org/pub/linux/kernel/projects/rt/5.9/patch-5.9.1-rt20.patch.sign \
+#     && xz -d *.xz \
+#     && tar xf linux-*.tar \
+#     && cd linux-*/ \
+#     && patch -p1 < ../patch-*.patch \
+#     && make olddefconfig \
+#     && make menuconfig \
+#     && make -j$(nproc) deb-pkg \
+#     && sudo dpkg -i ../linux-headers-*.deb ../linux-image-*.deb 
+
+# Time zone
+# ENV TZ=America/New_York
+# RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # Spin the container
 CMD ["tail", "-f", "/dev/null"]
