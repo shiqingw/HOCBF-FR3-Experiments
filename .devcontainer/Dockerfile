@@ -1,9 +1,6 @@
-ARG UBUNTU_VER=22.04
-ARG CONDA_VER=latest
-ARG OS_TYPE=x86_64
-# ARG OS_TYPE=aarch64
-
+# ARG UBUNTU_VER=22.04
 # FROM ubuntu:${UBUNTU_VER}
+
 FROM ros:humble
 
 # Use bash shell
@@ -33,9 +30,15 @@ RUN apt-get install -y vim \
     python3-pip \
     libpoco-dev
 
-# Latex packages
-RUN apt-get install -y --no-install-recommends texlive-full cm-super \
-    && texhash 
+# Install minimal LaTeX packages for English
+RUN apt-get install -y --no-install-recommends \
+    texlive-latex-recommended \
+    texlive-latex-extra \
+    texlive-fonts-recommended \
+    texlive-base \
+    cm-super \
+    dvipng \
+    && texhash
 
 # Display
 RUN apt-get install -y -q --no-install-recommends \
@@ -98,7 +101,7 @@ RUN git clone https://github.com/xtensor-stack/xtensor.git \
     && rm -rf xtensor
 
 # Install xtensor-blas
-RUN git clone https://github.com/xtensor-stack/xtensor-blas.git \
+RUN git clone https://github.com/shiqingw/xtensor-blas.git \
     && cd xtensor-blas \
     && mkdir build \
     && cd build \
