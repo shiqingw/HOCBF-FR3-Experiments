@@ -62,7 +62,7 @@ RUN pip3 install numpy \
     empy==3.3.4 \
     catkin_pkg \
     lark \
-    pybind11
+    "pybind11[global]"
 
 # Install xtl
 RUN git clone https://github.com/xtensor-stack/xtl.git \
