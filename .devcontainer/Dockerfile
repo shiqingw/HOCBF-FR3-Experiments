@@ -34,8 +34,8 @@ RUN apt-get install -y vim \
     libpoco-dev
 
 # Latex packages
-# RUN apt-get install -y --no-install-recommends texlive-full cm-super \
-#     && texhash 
+RUN apt-get install -y --no-install-recommends texlive-full cm-super \
+    && texhash 
 
 # Display
 RUN apt-get install -y -q --no-install-recommends \
@@ -76,15 +76,15 @@ RUN git clone https://github.com/xtensor-stack/xtl.git \
     && rm -rf xtl
 
 # # Install xsimd
-# RUN git clone https://github.com/xtensor-stack/xsimd.git \
-#     && cd xsimd \
-#     && mkdir build \
-#     && cd build \
-#     && cmake -DCMAKE_INSTALL_PREFIX='/usr/local' .. \
-#     && make \
-#     && make install \
-#     && cd / \
-#     && rm -rf xsimd
+RUN git clone https://github.com/xtensor-stack/xsimd.git \
+    && cd xsimd \
+    && mkdir build \
+    && cd build \
+    && cmake -DCMAKE_INSTALL_PREFIX='/usr/local' .. \
+    && make \
+    && make install \
+    && cd / \
+    && rm -rf xsimd
 
 # Install xtensor
 RUN git clone https://github.com/xtensor-stack/xtensor.git \
@@ -194,10 +194,10 @@ RUN git clone https://github.com/shiqingw/Scaling-Functions-Helper.git\
     && cd Scaling-Functions-Helper \
     && mkdir build \
     && cd build \
-    && cmake -DCMAKE_INSTALL_PREFIX='/usr/local' -DBLAS_LIBRARIES=/usr/lib/x86_64-linux-gnu/libopenblas.so -DBLAS_INCLUDE_DIR=/usr/include .. \
+    && cmake .. \
     && make install \
     && cd .. \
-    && pip install -e -DBLAS_LIBRARIES=/usr/lib/x86_64-linux-gnu/libopenblas.so -DBLAS_INCLUDE_DIR=/usr/include .
+    && pip install -e .
     
 # Install HOCBF-Helper
 RUN git clone https://github.com/shiqingw/HOCBF-Helper.git\
