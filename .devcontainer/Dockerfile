@@ -28,7 +28,8 @@ RUN apt-get install -y vim \
     libboost-all-dev \
     libglib2.0-dev \
     python3-pip \
-    libpoco-dev
+    libpoco-dev \
+    python3-tk
 
 # Install minimal LaTeX packages for English
 RUN apt-get install -y --no-install-recommends \
@@ -65,6 +66,7 @@ RUN pip3 install numpy \
     empy==3.3.4 \
     catkin_pkg \
     lark \
+    PyQt6 \
     "pybind11[global]"
 
 # Install xtl

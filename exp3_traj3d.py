@@ -1,5 +1,7 @@
 import numpy as np
 import pickle
+import matplotlib
+matplotlib.use('TkAgg') 
 import matplotlib.pyplot as plt
 
 
@@ -88,8 +90,8 @@ if __name__ == '__main__':
     kf_center_all = np.array(kf_center_all)
     kf_vel_all = np.array(kf_vel_all)
 
-    idx_start = np.argmax(center_timestamp_all > 17.3)
-    idx_end = np.argmax(center_timestamp_all > 18.2)
+    idx_start = np.argmax(center_timestamp_all > 012.9)
+    idx_end = np.argmax(center_timestamp_all > 13.6)
     
     predict_idx = 4
     time_ahead = future_times[predict_idx]

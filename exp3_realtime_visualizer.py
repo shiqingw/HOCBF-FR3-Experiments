@@ -28,6 +28,7 @@ if __name__ == '__main__':
     # load the extrinsic params from the pickle file
     with open('exp3_base_T_world.pkl', 'rb') as f:
         base_T_world = pickle.load(f)
+    print(base_T_world)
 
     start_time = time.time()
     while time.time() -start_time < 300:

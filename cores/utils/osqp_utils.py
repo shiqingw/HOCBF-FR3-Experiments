@@ -4,8 +4,12 @@ import numpy as np
 from cores.configuration.configuration import Configuration
 config = Configuration()
 
-def init_osqp(n_v, n_in):
-    P = scipy.sparse.eye(n_v, format='csc', dtype=config.np_dtype) 
+def init_osqp(n_v, n_in, P_diag=None):
+    if P_diag is None:
+        P = scipy.sparse.eye(n_v, format='csc', dtype=config.np_dtype) 
+    else:
+        assert len(P_diag) == n_v
+        P = scipy.sparse.csc_matrix(np.diag(P_diag))
 
     A_tmp = np.zeros((n_in, n_v), dtype=config.np_dtype)
     data = A_tmp.flatten()
