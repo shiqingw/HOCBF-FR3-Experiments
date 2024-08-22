@@ -86,7 +86,7 @@ class MarkerSubscriber(Node):
         self.center_timestamp_prev = 0
 
         self.consecutive_frames = 0
-        self.max_consecutive_frames = 48
+        self.max_consecutive_frames = 36
         self.consecutive_centers = np.zeros((self.max_consecutive_frames, 3))
         self.consecutive_timestamps = np.zeros(self.max_consecutive_frames)
 

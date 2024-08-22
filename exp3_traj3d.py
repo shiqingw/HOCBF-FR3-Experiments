@@ -22,7 +22,7 @@ if __name__ == '__main__':
     kf_center_all = []
     kf_vel_all = []
 
-    future_times = np.array([0,0.05,0.1,0.15,0.2])
+    future_times = np.array([0,0.05,0.1,0.15,0.2,0.25])
     num_prediction = len(future_times)
     for sample in data['dataset']:
         msg_timestamp_all.append(sample[0]) # must exist
@@ -90,8 +90,8 @@ if __name__ == '__main__':
     kf_center_all = np.array(kf_center_all)
     kf_vel_all = np.array(kf_vel_all)
 
-    idx_start = np.argmax(center_timestamp_all > 012.9)
-    idx_end = np.argmax(center_timestamp_all > 13.6)
+    idx_start = np.argmax(center_timestamp_all > 17.3)
+    idx_end = np.argmax(center_timestamp_all > 17.9)
     
     predict_idx = 4
     time_ahead = future_times[predict_idx]

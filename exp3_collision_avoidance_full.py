@@ -41,8 +41,8 @@ if __name__ == '__main__':
     n_joints = 7
     n_controls = 7
     q_bar = 0.5*(joint_ub + joint_lb)
-    delta_M = np.diag([0.2, 0.25, 0.25, 0.25, 0.25, 0.25, 0.2])
-    # delta_M = np.zeros([n_joints, n_joints])
+    # delta_M = np.diag([0.2, 0.25, 0.25, 0.25, 0.25, 0.25, 0.2])
+    delta_M = np.zeros([n_joints, n_joints])
 
     # Load the bounding shape coefficients
     BB_coefs = BoundingShapeCoef()
@@ -80,8 +80,8 @@ if __name__ == '__main__':
 
     # CBF parameters
     alpha0 = 1.03
-    gamma1 = 10.0
-    gamma2 = 10.0
+    gamma1 = 7.0
+    gamma2 = 7.0
     compensation = 0.0
 
     # Define proxuite problem
@@ -90,7 +90,7 @@ if __name__ == '__main__':
     n_robots = len(robot_SFs)
     n_CBF = n_selected_BBs*n_obstacle
     n_in = n_CBF + n_controls + n_controls + n_controls # limits on torque, dq, q
-    P_diag = [1]*n_controls + [10000]*(len(future_ind) - 1)
+    P_diag = [1]*n_controls + [100]*(len(future_ind) - 1)
     n_v = n_controls + len(future_ind) - 1
     cbf_qp = init_osqp(n_v=n_v, n_in=n_in, P_diag=P_diag)
 
@@ -140,6 +140,7 @@ if __name__ == '__main__':
             if robot_info is None:
                 continue
             q = robot_info['q'] # shape (7,)
+            # print(q)
             dq = robot_info['dq'] # shape (7,)
             M = robot_info['M'] + delta_M # shape (7,7)
             G = robot_info['G'] # shape (7,)
@@ -156,6 +157,9 @@ if __name__ == '__main__':
             e_joint = q - q_d
             e_joint_dot = dq
             ddq_nominal = - Kp_joint @ e_joint - Kd_joint @ e_joint_dot
+            h_dq_lb = dq[:7] - dq_lb[:7]
+            h_dq_ub = dq_ub[:7] - dq[:7]
+            ddq_nominal = np.clip(ddq_nominal, -5*h_dq_lb, 5*h_dq_ub)
 
             # Ball status
             is_flying = marker_subscriber.is_flying
