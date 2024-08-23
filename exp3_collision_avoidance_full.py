@@ -47,7 +47,8 @@ if __name__ == '__main__':
     # Load the bounding shape coefficients
     BB_coefs = BoundingShapeCoef()
     # selected_BBs = ["HAND_BB", "LINK7_BB", "LINK6_BB"]
-    selected_BBs = ["HAND_BB", "LINK7_BB"]
+    # selected_BBs = ["HAND_BB", "LINK7_BB"]
+    selected_BBs = ["HAND_BB", "LINK7_BB", "LINK6_BB", "LINK5_2_BB", "LINK5_1_BB", "LINK4_BB", "LINK3_BB"]
     n_selected_BBs = len(selected_BBs)
 
     # Define SFs
@@ -66,7 +67,7 @@ if __name__ == '__main__':
 
     # Define problems
     print("==> Define diff opt problems")
-    n_threads = min(max(multiprocessing.cpu_count() -1, 1), len(selected_BBs))
+    n_threads = min(max(multiprocessing.cpu_count() -1, 1), 7)
     probs = hh.Problem3dCollectionMovingObstacle(n_threads)
     for j in range(len(obstacle_SFs)):
         SF_obs = obstacle_SFs[j]
@@ -80,8 +81,8 @@ if __name__ == '__main__':
 
     # CBF parameters
     alpha0 = 1.03
-    gamma1 = 7.0
-    gamma2 = 7.0
+    gamma1 = 15.0
+    gamma2 = 15.0
     compensation = 0.0
 
     # Define proxuite problem
@@ -117,8 +118,8 @@ if __name__ == '__main__':
     
     # Control parameters
     q_d = np.array([0.0, -0.1, 0.0, -1.7, 0.0, 1.67, 0.785])
-    Kp_joint = sparse.csc_matrix(np.diag([30.0, 30.0, 30.0, 30.0, 30.0, 30.0, 30.0]))
-    Kd_joint = sparse.csc_matrix(np.diag([15.0, 15.0, 15.0, 15.0, 15.0, 15.0, 15.0]))
+    Kp_joint = sparse.csc_matrix(np.diag([30.0, 30.0, 30.0, 30.0, 30.0, 50.0, 30.0]))
+    Kd_joint = sparse.csc_matrix(np.diag([15.0, 15.0, 15.0, 15.0, 15.0, 25.0, 15.0]))
     
     # Main loop
     print("==> Start control loop")
@@ -130,6 +131,9 @@ if __name__ == '__main__':
     ball_center_list = []
     ball_vel_list = []
     time_per_loop_list = []
+
+    now = datetime.now()
+    formatted_date_time = now.strftime("%Y-%m-%d-%H-%M-%S")
 
     try:
         t_start = time.time()
@@ -283,9 +287,6 @@ if __name__ == '__main__':
         robot.setCommands(np.zeros_like(tau))
 
         # Save data
-        now = datetime.now()
-        formatted_date_time = now.strftime("%Y-%m-%d-%H-%M-%S")
-
         directory = f"exp3_results/no_circ_{formatted_date_time}"
 
         # Create the directory if it doesn't exist
