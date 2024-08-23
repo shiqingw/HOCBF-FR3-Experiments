@@ -126,6 +126,7 @@ if __name__ == '__main__':
     dq_list = []
     tau_list = []
     all_h_list = []
+    is_flying_list = []
     ball_center_list = []
     ball_vel_list = []
     time_per_loop_list = []
@@ -201,6 +202,10 @@ if __name__ == '__main__':
                 all_v_dot_obs_np[ii, :] = ball_acc_in_base
                 all_omega_dot_obs_np[ii, :] = np.zeros(3)
 
+                if ii == 0:
+                    ball_center_list.append(ball_pos_in_base.copy())
+                    ball_vel_list.append(ball_vel_in_base.copy())
+
             all_h_np, all_phi1_np, all_actuation_np, all_lb_np, all_ub_np = \
                     probs.getCBFConstraints(dq, all_P_rob_np, all_quat_rob_np, all_J_rob_np, all_dJdq_rob_np, 
                                             all_P_obs_np, all_quat_obs_np, all_v_obs_np, all_omega_obs_np, 
@@ -272,9 +277,8 @@ if __name__ == '__main__':
             dq_list.append(dq.copy())
             tau_list.append(tau.copy())
             all_h_list.append(all_h_np.copy())
-            ball_center_list.append(ball_pos_in_base.copy())
-            ball_vel_list.append(ball_vel_in_base.copy())
             time_per_loop_list.append(time_loop_end - time_loop_start)
+            is_flying_list.append(is_flying)
     finally:
         robot.setCommands(np.zeros_like(tau))
 
@@ -297,6 +301,7 @@ if __name__ == '__main__':
             "dq": dq_list,
             "tau": tau_list,
             "all_h": all_h_list,
+            "is_flying": is_flying_list,
             "ball_center": ball_center_list,
             "ball_vel": ball_vel_list,
             "time_per_loop": time_per_loop_list
