@@ -60,7 +60,7 @@ RUN pip3 install numpy \
     matplotlib \
     proxsuite \
     pin \
-    mujoco \
+    mujoco==3.1.6 \
     osqp \
     ipykernel \
     empy==3.3.4 \
